@@ -11,8 +11,6 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
-  BarChart,
-  Bar,
 } from 'recharts';
 
 interface Kpi {
@@ -45,12 +43,6 @@ function formatPeriod(period: string | null): string {
   if (!period) return '';
   const d = new Date(period);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
-}
-
-function formatPeriodLong(period: string | null): string {
-  if (!period) return '';
-  const d = new Date(period);
-  return d.toLocaleDateString('en-US', { dateStyle: 'long' });
 }
 
 /** Compute period start (inclusive) and end (exclusive) as ISO strings for the API */
@@ -173,18 +165,8 @@ export function Dashboard() {
     periodLabel: formatPeriod(p.period),
   }));
 
-  const firstPeriod = data.messagesOverTime[0]?.period;
-  const lastPeriod = data.messagesOverTime[data.messagesOverTime.length - 1]?.period;
-  const dateRangeLabel =
-    firstPeriod && lastPeriod
-      ? `Data from ${formatPeriodLong(firstPeriod)} to ${formatPeriodLong(lastPeriod)} (all periods shown, including zero activity)`
-      : null;
-
   return (
     <>
-      {dateRangeLabel && (
-        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '1rem' }}>{dateRangeLabel}</p>
-      )}
       <div className="filters">
         <label>
           Group by
@@ -245,32 +227,38 @@ export function Dashboard() {
       <div className="card">
         <h2>Messages over time</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-          Click a bar to see details for that period. All dates in range are shown (including days/weeks with no messages).
+          Click a point to see details. All dates in range are shown (including days with no messages).
         </p>
         <div className="chart-container">
           {messagesData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={messagesData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <AreaChart data={messagesData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2f3336" />
-                <XAxis dataKey="periodLabel" stroke="#8b98a5" fontSize={11} interval={0} angle={-35} textAnchor="end" height={60} />
+                <XAxis dataKey="periodLabel" stroke="#8b98a5" fontSize={12} />
                 <YAxis stroke="#8b98a5" fontSize={12} />
                 <Tooltip
                   contentStyle={{ background: '#16181c', border: '1px solid #2f3336', borderRadius: 8 }}
                   labelStyle={{ color: '#e7e9ea' }}
                   formatter={(value: number) => [value, 'Messages']}
                   labelFormatter={(label) => label}
-                  cursor={{ fill: 'rgba(29, 155, 240, 0.2)' }}
                 />
-                <Bar
+                <Area
+                  type="monotone"
                   dataKey="count"
+                  stroke="#1d9bf0"
                   fill="#1d9bf0"
-                  cursor="pointer"
-                  name="Messages"
-                  onClick={(data: { period: string; periodLabel: string; count: number }) =>
-                    setModalPoint({ period: data.period, periodLabel: data.periodLabel, count: data.count })
-                  }
+                  fillOpacity={0.3}
+                  activeDot={{ r: 5, onClick: (_e: unknown, payload: unknown) => {
+                    const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload
+                      ?? (payload as { period?: string; periodLabel?: string; count?: number });
+                    if (p?.period != null) setModalPoint({
+                      period: p.period,
+                      periodLabel: p.periodLabel ?? formatPeriod(p.period),
+                      count: p.count ?? 0,
+                    });
+                  } }}
                 />
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8b98a5' }}>
@@ -343,7 +331,7 @@ export function Dashboard() {
       <div className="card">
         <h2>Reactions over time</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-          All dates in range are shown (including periods with no reactions).
+          All dates in range shown (including zero).
         </p>
         <div className="chart-container">
           {reactionsData.length > 0 ? (
