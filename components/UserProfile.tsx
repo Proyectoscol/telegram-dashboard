@@ -4,13 +4,16 @@ import { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface UserProfileProps {
-  fromId: string;
+  fromId?: string;
+  /** When set, load user by internal id (for list-only users with from_id null). */
+  byId?: number;
 }
 
 interface UserDetail {
   id: number;
-  from_id: string;
+  from_id: string | null;
   display_name: string | null;
+  username?: string | null;
   is_premium: boolean;
   assigned_to: string | null;
   notes: string | null;
@@ -48,7 +51,7 @@ interface TimeSeries {
   count: number;
 }
 
-export function UserProfile({ fromId }: UserProfileProps) {
+export function UserProfile({ fromId: fromIdProp, byId }: UserProfileProps) {
   const [user, setUser] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +67,11 @@ export function UserProfile({ fromId }: UserProfileProps) {
     created_by: '',
   });
 
+  const fromId = fromIdProp ?? (user?.from_id ?? null);
+
   useEffect(() => {
-    fetch(`/api/users/${encodeURIComponent(fromId)}`)
+    const url = byId != null ? `/api/users/by-id/${byId}` : `/api/users/${encodeURIComponent(fromIdProp!)}`;
+    fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error('User not found');
         return r.json();
@@ -73,22 +79,24 @@ export function UserProfile({ fromId }: UserProfileProps) {
       .then(setUser)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [fromId]);
+  }, [byId, fromIdProp]);
 
   useEffect(() => {
-    if (!fromId) return;
+    const fid = user?.from_id ?? null;
+    if (!fid) return;
     const params = new URLSearchParams({ groupBy });
-    fetch(`/api/users/${encodeURIComponent(fromId)}/stats?${params}`)
+    fetch(`/api/users/${encodeURIComponent(fid)}/stats?${params}`)
       .then((r) => r.json())
       .then(setTimeSeries)
       .catch(() => setTimeSeries(null));
-  }, [fromId, groupBy]);
+  }, [user?.from_id, groupBy]);
 
   const handlePatch = async (updates: { is_premium?: boolean; assigned_to?: string; notes?: string }) => {
     if (!user) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/users/${encodeURIComponent(fromId)}`, {
+      const url = byId != null ? `/api/users/by-id/${byId}` : `/api/users/${encodeURIComponent(fromId!)}`;
+      const res = await fetch(url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
@@ -105,9 +113,11 @@ export function UserProfile({ fromId }: UserProfileProps) {
 
   const handleSubmitCall = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/users/${encodeURIComponent(fromId)}/calls`, {
+      const url = byId != null ? `/api/users/by-id/${byId}/calls` : `/api/users/${encodeURIComponent(fromId!)}/calls`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -390,12 +400,12 @@ export function UserProfile({ fromId }: UserProfileProps) {
 
       <div className="card">
         <h2>Reactions given (who they react to)</h2>
-        <ReactionsGivenList fromId={fromId} />
+        {fromId ? <ReactionsGivenList fromId={fromId} /> : <p style={{ color: '#8b98a5' }}>No Telegram ID yet (list-only contact). Stats and lists will appear after they interact and you re-import.</p>}
       </div>
 
       <div className="card">
         <h2>Recent messages</h2>
-        <UserMessagesList fromId={fromId} />
+        {fromId ? <UserMessagesList fromId={fromId} /> : null}
       </div>
     </div>
   );

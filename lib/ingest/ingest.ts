@@ -49,6 +49,29 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
     }
   }
   for (const [from_id, display_name] of Array.from(userMap.entries())) {
+    const trimName = (display_name ?? '').trim();
+    // 1) If user with this from_id already exists, just refresh display_name
+    const existing = await pool.query<{ id: number }>(`SELECT id FROM users WHERE from_id = $1 LIMIT 1`, [from_id]);
+    if (existing.rows.length > 0) {
+      await pool.query(
+        `UPDATE users SET display_name = $1, updated_at = NOW() WHERE from_id = $2`,
+        [display_name, from_id]
+      );
+      continue;
+    }
+    // 2) If a list-only user exists with matching display_name, assign from_id to merge (track by from_id going forward)
+    const listMatch = await pool.query<{ id: number }>(
+      `SELECT id FROM users WHERE from_id IS NULL AND TRIM(COALESCE(display_name, '')) = $1 LIMIT 1`,
+      [trimName]
+    );
+    if (listMatch.rows.length > 0) {
+      await pool.query(
+        `UPDATE users SET from_id = $1, display_name = $2, updated_at = NOW() WHERE id = $3`,
+        [from_id, display_name, listMatch.rows[0].id]
+      );
+      continue;
+    }
+    // 3) New user: insert (from_id is unique)
     await pool.query(
       `INSERT INTO users (from_id, display_name, updated_at)
        VALUES ($1, $2, NOW())

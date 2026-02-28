@@ -12,14 +12,25 @@ CREATE TABLE IF NOT EXISTS chats (
 
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
-  from_id TEXT UNIQUE NOT NULL,
+  from_id TEXT UNIQUE,
   display_name TEXT,
+  username TEXT,
   is_premium BOOLEAN DEFAULT FALSE,
   assigned_to TEXT,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrations for existing DBs: add username, allow from_id NULL, unique on username
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username') THEN
+    ALTER TABLE users ADD COLUMN username TEXT;
+  END IF;
+END $$;
+ALTER TABLE users ALTER COLUMN from_id DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS messages (
   id SERIAL PRIMARY KEY,

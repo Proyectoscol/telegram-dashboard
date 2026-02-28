@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 
 interface UserRow {
   id: number;
-  from_id: string;
+  from_id: string | null;
   display_name: string | null;
+  username: string | null;
   is_premium: boolean;
   assigned_to: string | null;
   notes: string | null;
@@ -64,6 +65,7 @@ export default function ContactsPage() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Username</th>
                 <th>User ID</th>
                 <th>Premium</th>
                 <th>Assigned to</th>
@@ -77,7 +79,8 @@ export default function ContactsPage() {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.display_name || '—'}</td>
-                  <td><code style={{ fontSize: '0.8rem' }}>{u.from_id}</code></td>
+                  <td>{u.username ? `@${u.username}` : '—'}</td>
+                  <td><code style={{ fontSize: '0.8rem' }}>{u.from_id ?? '—'}</code></td>
                   <td>
                     <span className={u.is_premium ? 'badge badge-premium' : 'badge badge-default'}>
                       {u.is_premium ? 'Yes' : 'No'}
@@ -88,7 +91,7 @@ export default function ContactsPage() {
                   <td>{u.call_count}</td>
                   <td>{formatDate(u.last_call_at)}</td>
                   <td>
-                    <a href={`/users/${encodeURIComponent(u.from_id)}`}>View profile</a>
+                    <a href={u.from_id ? `/users/${encodeURIComponent(u.from_id)}` : `/users/by-id/${u.id}`}>View profile</a>
                   </td>
                 </tr>
               ))}

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         FROM contact_calls
         GROUP BY user_id
       )
-      SELECT u.id, u.from_id, u.display_name, u.is_premium, u.assigned_to, u.notes,
+      SELECT u.id, u.from_id, u.display_name, u.username, u.is_premium, u.assigned_to, u.notes,
              la.last_date AS last_activity,
              COALESCE(cc.call_count, 0) AS call_count,
              cc.last_call AS last_call_at

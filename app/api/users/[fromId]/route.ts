@@ -11,7 +11,7 @@ export async function GET(
     await ensureSchema();
     const fromId = decodeURIComponent((await params).fromId);
     const userRes = await pool.query(
-      'SELECT id, from_id, display_name, is_premium, assigned_to, notes, created_at, updated_at FROM users WHERE from_id = $1',
+      'SELECT id, from_id, display_name, username, is_premium, assigned_to, notes, created_at, updated_at FROM users WHERE from_id = $1',
       [fromId]
     );
     const user = userRes.rows[0];
@@ -125,7 +125,7 @@ export async function PATCH(
       `UPDATE users SET ${updates.join(', ')} WHERE from_id = $${idx}`,
       values
     );
-    const u = await pool.query('SELECT id, from_id, display_name, is_premium, assigned_to, notes FROM users WHERE from_id = $1', [fromId]);
+    const u = await pool.query('SELECT id, from_id, display_name, username, is_premium, assigned_to, notes FROM users WHERE from_id = $1', [fromId]);
     return NextResponse.json(u.rows[0] || {});
   } catch (err) {
     console.error('user patch error:', err);
