@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
           : "date_trunc('day', m.date)";
 
     const mParams: (string | number)[] = [];
-    const mConds: string[] = ["m.type = 'message'"];
+    const mConds: string[] = ["m.type = 'message'", "m.date >= '2000-01-01'::timestamptz"];
     if (chatId) {
       mParams.push(chatId);
       mConds.push(`m.chat_id = $${mParams.length}`);
@@ -102,8 +102,9 @@ export async function GET(request: NextRequest) {
     }
     const mWhere = mConds.join(' AND ');
     const rangeWhere = mWhere.replace(/m\./g, '');
+    // Exclude invalid/epoch dates (e.g. date_unixtime 0 from Telegram export) so range is sane
     const rangeResult = await pool.query(
-      `SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM messages WHERE ${rangeWhere}`,
+      `SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM messages WHERE ${rangeWhere} AND date >= '2000-01-01'::timestamptz`,
       mParams
     );
     const minDate = rangeResult.rows[0]?.min_date;
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
           ? "date_trunc('week', r.reacted_at)"
           : "date_trunc('day', r.reacted_at)";
     const rParams: (string | number)[] = [];
-    const rConds: string[] = [];
+    const rConds: string[] = ["r.reacted_at >= '2000-01-01'::timestamptz"];
     if (chatId) {
       rParams.push(chatId);
       rConds.push(`r.chat_id = $${rParams.length}`);
@@ -154,9 +155,9 @@ export async function GET(request: NextRequest) {
       rParams.push(end);
       rConds.push(`r.reacted_at <= $${rParams.length}::timestamptz`);
     }
-    const rWhere = rConds.length ? rConds.join(' AND ') : '1=1';
+    const rWhere = rConds.join(' AND ');
     const rRangeResult = await pool.query(
-      `SELECT MIN(reacted_at) AS min_date, MAX(reacted_at) AS max_date FROM reactions WHERE ${rWhere}`,
+      `SELECT MIN(reacted_at) AS min_date, MAX(reacted_at) AS max_date FROM reactions WHERE ${rWhere} AND reacted_at >= '2000-01-01'::timestamptz`,
       rParams
     );
     const rMinDate = rRangeResult.rows[0]?.min_date;
@@ -190,7 +191,7 @@ export async function GET(request: NextRequest) {
       kpiIdx++;
     }
     if (fromId) kpiParams.push(fromId);
-    const msgWhereParts: string[] = ["type = 'message'"];
+    const msgWhereParts: string[] = ["type = 'message'", "date >= '2000-01-01'::timestamptz"];
     if (chatId) msgWhereParts.push(`chat_id = $1`);
     if (fromId) msgWhereParts.push(`from_id = $${kpiParams.length}`);
     const msgWhere = 'WHERE ' + msgWhereParts.join(' AND ');
@@ -206,7 +207,7 @@ export async function GET(request: NextRequest) {
       `SELECT COUNT(*)::int AS c FROM reactions ${reactWhere}`,
       kpiParams
     ).then((r) => r.rows[0]?.c ?? 0);
-    const contactsWhereParts = ['from_id IS NOT NULL'];
+    const contactsWhereParts = ['from_id IS NOT NULL', "date >= '2000-01-01'::timestamptz"];
     if (chatId) contactsWhereParts.push('chat_id = $1');
     const contactsWhere = 'WHERE ' + contactsWhereParts.join(' AND ');
     const uniqueContacts = fromId
@@ -215,7 +216,7 @@ export async function GET(request: NextRequest) {
           `SELECT COUNT(DISTINCT from_id)::int AS c FROM messages ${contactsWhere}`,
           chatId ? [chatId] : []
         ).then((r) => r.rows[0]?.c ?? 0);
-    const active30WhereParts = ["type = 'message'", "date >= NOW() - INTERVAL '30 days'", 'from_id IS NOT NULL'];
+    const active30WhereParts = ["type = 'message'", "date >= '2000-01-01'::timestamptz", "date >= NOW() - INTERVAL '30 days'", 'from_id IS NOT NULL'];
     if (chatId) active30WhereParts.push('chat_id = $1');
     if (fromId) active30WhereParts.push('from_id = $' + kpiParams.length);
     const activeUsers30d = await pool.query(
