@@ -11,6 +11,10 @@ export interface IngestResult {
   reactionsInserted: number;
   reactionsSkipped: number;
   usersUpserted: number;
+  /** Errors encountered (e.g. FK, invalid data); ingest continues and skips failing items */
+  errors?: string[];
+  messageErrors?: number;
+  reactionErrors?: number;
 }
 
 export async function ingestExport(data: TelegramExport, filename: string): Promise<IngestResult> {
@@ -58,6 +62,10 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
   let messagesSkipped = 0;
   let reactionsInserted = 0;
   let reactionsSkipped = 0;
+  let messageErrors = 0;
+  let reactionErrors = 0;
+  const errors: string[] = [];
+  const maxErrors = 20;
 
   for (const msg of messages) {
     const messageId = msg.id;
@@ -77,16 +85,22 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
       }
     }
 
-    const res = await pool.query(
-      `INSERT INTO messages (chat_id, message_id, type, date, from_id, actor_id, text, reply_to_message_id, edited_at, media_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)
-       ON CONFLICT (chat_id, message_id) DO NOTHING`,
-      [chatId, messageId, type, date, fromId, actorId, text || null, replyToMessageId, editedAt, mediaType]
-    );
-    if (res.rowCount && res.rowCount > 0) {
-      messagesInserted++;
-    } else {
-      messagesSkipped++;
+    try {
+      const res = await pool.query(
+        `INSERT INTO messages (chat_id, message_id, type, date, from_id, actor_id, text, reply_to_message_id, edited_at, media_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)
+         ON CONFLICT (chat_id, message_id) DO NOTHING`,
+        [chatId, messageId, type, date, fromId, actorId, text || null, replyToMessageId, editedAt, mediaType]
+      );
+      if (res.rowCount && res.rowCount > 0) {
+        messagesInserted++;
+      } else {
+        messagesSkipped++;
+      }
+    } catch (err) {
+      messageErrors++;
+      const msgErr = err instanceof Error ? err.message : String(err);
+      if (errors.length < maxErrors) errors.push(`Message ${messageId}: ${msgErr}`);
     }
 
     // Reactions
@@ -103,16 +117,22 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
             // keep null
           }
         }
-        const rRes = await pool.query(
-          `INSERT INTO reactions (chat_id, message_id, reactor_from_id, emoji, reacted_at)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (chat_id, message_id, reactor_from_id) DO NOTHING`,
-          [chatId, messageId, reactorFromId, emoji, reactedAt]
-        );
-        if (rRes.rowCount && rRes.rowCount > 0) {
-          reactionsInserted++;
-        } else {
-          reactionsSkipped++;
+        try {
+          const rRes = await pool.query(
+            `INSERT INTO reactions (chat_id, message_id, reactor_from_id, emoji, reacted_at)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (chat_id, message_id, reactor_from_id) DO NOTHING`,
+            [chatId, messageId, reactorFromId, emoji, reactedAt]
+          );
+          if (rRes.rowCount && rRes.rowCount > 0) {
+            reactionsInserted++;
+          } else {
+            reactionsSkipped++;
+          }
+        } catch (err) {
+          reactionErrors++;
+          const rErr = err instanceof Error ? err.message : String(err);
+          if (errors.length < maxErrors) errors.push(`Reaction msg ${messageId} by ${reactorFromId}: ${rErr}`);
         }
       }
     }
@@ -124,7 +144,7 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
     [chatId, filename, messagesInserted, messagesSkipped, reactionsInserted, reactionsSkipped]
   );
 
-  return {
+  const result: IngestResult = {
     chatId,
     messagesInserted,
     messagesSkipped,
@@ -132,4 +152,10 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
     reactionsSkipped,
     usersUpserted,
   };
+  if (messageErrors > 0 || reactionErrors > 0) {
+    result.messageErrors = messageErrors;
+    result.reactionErrors = reactionErrors;
+    result.errors = errors;
+  }
+  return result;
 }

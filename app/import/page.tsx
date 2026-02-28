@@ -11,6 +11,9 @@ export default function ImportPage() {
     reactionsInserted: number;
     reactionsSkipped: number;
     usersUpserted: number;
+    errors?: string[];
+    messageErrors?: number;
+    reactionErrors?: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -47,7 +50,7 @@ export default function ImportPage() {
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        Upload a <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>result.json</code> export from Telegram. New messages and reactions will be added; existing ones are skipped.
+        Upload a <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>result.json</code> from Telegram. You can upload the same file or a new export (e.g. next day) anytime—only new messages and reactions are stored; existing ones are skipped by ID. Feed the system daily or weekly.
       </p>
 
       <form onSubmit={handleSubmit} className="card">
@@ -66,11 +69,29 @@ export default function ImportPage() {
 
         {error && <div className="alert alert-error">{error}</div>}
         {result && (
-          <div className="alert alert-success">
-            Import complete. Messages inserted: {result.messagesInserted}, skipped: {result.messagesSkipped}.
-            Reactions inserted: {result.reactionsInserted}, skipped: {result.reactionsSkipped}.
-            Users upserted: {result.usersUpserted}.
-          </div>
+          <>
+            <div className="alert alert-success">
+              Import complete. Messages inserted: {result.messagesInserted}, skipped: {result.messagesSkipped}.
+              Reactions inserted: {result.reactionsInserted}, skipped: {result.reactionsSkipped}.
+              Users upserted: {result.usersUpserted}.
+            </div>
+            {(result.messageErrors !== undefined && result.messageErrors > 0) || (result.reactionErrors !== undefined && result.reactionErrors > 0) ? (
+              <div className="alert" style={{ background: 'rgba(255, 165, 0, 0.15)', border: '1px solid #f90', color: '#f90' }}>
+                Some items were skipped due to errors: {result.messageErrors ?? 0} message(s), {result.reactionErrors ?? 0} reaction(s).
+                {result.errors && result.errors.length > 0 && (
+                  <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                    <summary>First errors</summary>
+                    <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                      {result.errors.slice(0, 10).map((e, i) => (
+                        <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
+                      ))}
+                      {result.errors.length > 10 && <li>… and {result.errors.length - 10} more</li>}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            ) : null}
+          </>
         )}
 
         <button type="submit" className="btn" disabled={!file || loading}>
