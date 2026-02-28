@@ -7,7 +7,10 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 COPY . .
-ENV DATABASE_URL=postgres://localhost:5432/dummy
+# Next.js may run API routes during "Collecting page data"; DB is not available at build time.
+# Use a dummy URL so the build does not fail; real DATABASE_URL must be set at runtime.
+ENV DATABASE_URL=postgres://build:build@127.0.0.1:5432/build
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Production stage
