@@ -27,32 +27,32 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
     [chatId, chatName, chatType, MAIN_CHAT_SLUG]
   );
 
-  // 2. Collect all user identifiers and upsert users
-  const userSet = new Set<{ from_id: string; display_name: string }>();
+  // 2. Collect all user identifiers and upsert users (include every from_id so FK is satisfied)
+  const userMap = new Map<string, string>();
+  const addUser = (from_id: string | undefined, display_name: string | undefined) => {
+    if (!from_id || !from_id.trim()) return;
+    const id = from_id.trim();
+    const name = (display_name && display_name.trim()) || id;
+    if (!userMap.has(id) || (name !== id && userMap.get(id) === id)) userMap.set(id, name);
+  };
   for (const msg of messages) {
-    if (msg.from_id && msg.from) {
-      userSet.add({ from_id: msg.from_id, display_name: msg.from });
-    }
-    if (msg.actor_id && msg.actor) {
-      userSet.add({ from_id: msg.actor_id, display_name: msg.actor });
-    }
+    addUser(msg.from_id, msg.from);
+    addUser(msg.actor_id, msg.actor);
     for (const reaction of msg.reactions ?? []) {
       for (const r of reaction.recent ?? []) {
-        if (r.from_id && r.from != null) {
-          userSet.add({ from_id: r.from_id, display_name: r.from });
-        }
+        addUser(r.from_id, r.from);
       }
     }
   }
-  for (const u of Array.from(userSet)) {
+  for (const [from_id, display_name] of userMap) {
     await pool.query(
       `INSERT INTO users (from_id, display_name, updated_at)
        VALUES ($1, $2, NOW())
        ON CONFLICT (from_id) DO UPDATE SET display_name = $2, updated_at = NOW()`,
-      [u.from_id, u.display_name]
+      [from_id, display_name]
     );
   }
-  const usersUpserted = userSet.size;
+  const usersUpserted = userMap.size;
 
   let messagesInserted = 0;
   let messagesSkipped = 0;
