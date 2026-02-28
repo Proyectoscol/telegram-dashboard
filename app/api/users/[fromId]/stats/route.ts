@@ -127,8 +127,9 @@ export async function GET(
       rConds.push(`r.chat_id = $${rParams.length}`);
     }
     const rWhere = rConds.join(' AND ');
+    const rRangeWhere = rWhere.replace(/r\./g, '');
     const rRangeResult = await pool.query(
-      `SELECT MIN(reacted_at) AS min_date, MAX(reacted_at) AS max_date FROM reactions WHERE ${rWhere} AND reacted_at >= '2000-01-01'::timestamptz`,
+      `SELECT MIN(reacted_at) AS min_date, MAX(reacted_at) AS max_date FROM reactions WHERE ${rRangeWhere}`,
       rParams
     );
     const rMinDate = rRangeResult.rows[0]?.min_date;

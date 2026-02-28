@@ -200,10 +200,10 @@ export async function GET(request: NextRequest) {
       `SELECT COUNT(*)::int AS c FROM messages ${msgWhere}`,
       kpiParams
     ).then((r) => r.rows[0]?.c ?? 0);
-    const reactWhereParts: string[] = [];
+    const reactWhereParts: string[] = ["reacted_at >= '2000-01-01'::timestamptz"];
     if (chatId) reactWhereParts.push('chat_id = $1');
     if (fromId) reactWhereParts.push('reactor_from_id = $' + kpiParams.length);
-    const reactWhere = reactWhereParts.length ? 'WHERE ' + reactWhereParts.join(' AND ') : '';
+    const reactWhere = 'WHERE ' + reactWhereParts.join(' AND ');
     const totalReactions = await pool.query(
       `SELECT COUNT(*)::int AS c FROM reactions ${reactWhere}`,
       kpiParams
