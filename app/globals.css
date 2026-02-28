@@ -320,3 +320,84 @@ td a:hover {
   height: 18px;
   cursor: pointer;
 }
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal-box {
+  background: #16181c;
+  border: 1px solid #2f3336;
+  border-radius: 12px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #2f3336;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: #8b98a5;
+  cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: #e7e9ea;
+}
+.modal-body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+.modal-body section {
+  margin-bottom: 1rem;
+}
+.modal-body section:last-child {
+  margin-bottom: 0;
+}
+.modal-body .by-user-table {
+  width: 100%;
+  font-size: 0.8125rem;
+}
+.modal-body .by-user-table th,
+.modal-body .by-user-table td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #2f3336;
+}
+.modal-body .recent-msg {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #2f3336;
+  color: #e7e9ea;
+}
+.modal-body .recent-msg .meta {
+  font-size: 0.75rem;
+  color: #8b98a5;
+  margin-bottom: 0.2rem;
+}
+.modal-body .recent-msg .text {
+  font-size: 0.8125rem;
+  color: #8b98a5;
+}

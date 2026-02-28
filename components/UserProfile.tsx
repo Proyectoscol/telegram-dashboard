@@ -16,8 +16,20 @@ interface UserDetail {
   notes: string | null;
   stats: {
     messagesSent: number;
+    serviceMessages?: number;
+    totalActivity?: number;
     reactionsGiven: number;
     reactionsReceived: number;
+    reactionsRatio?: number;
+    totalWords?: number;
+    totalChars?: number;
+    activeDays?: number;
+    photos?: number;
+    videos?: number;
+    messagesEdited?: number;
+    replies?: number;
+    topReactedToId?: string | null;
+    topReactedToName?: string | null;
   };
   calls: {
     id: number;
@@ -40,7 +52,7 @@ export function UserProfile({ fromId }: UserProfileProps) {
   const [user, setUser] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('week');
+  const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
   const [timeSeries, setTimeSeries] = useState<{ messagesOverTime: TimeSeries[]; reactionsOverTime: TimeSeries[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [showCallForm, setShowCallForm] = useState(false);
@@ -151,6 +163,10 @@ export function UserProfile({ fromId }: UserProfileProps) {
           <div className="label">Messages sent</div>
         </div>
         <div className="kpi-card">
+          <div className="value">{(user.stats.serviceMessages ?? 0).toLocaleString()}</div>
+          <div className="label">Service messages</div>
+        </div>
+        <div className="kpi-card">
           <div className="value">{user.stats.reactionsGiven.toLocaleString()}</div>
           <div className="label">Reactions given</div>
         </div>
@@ -158,7 +174,44 @@ export function UserProfile({ fromId }: UserProfileProps) {
           <div className="value">{user.stats.reactionsReceived.toLocaleString()}</div>
           <div className="label">Reactions received</div>
         </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.reactionsRatio ?? 0)}</div>
+          <div className="label">Reactions / message ratio</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.totalWords ?? 0).toLocaleString()}</div>
+          <div className="label">Total words</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.totalChars ?? 0).toLocaleString()}</div>
+          <div className="label">Total characters</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.activeDays ?? 0).toLocaleString()}</div>
+          <div className="label">Active days</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.photos ?? 0)}</div>
+          <div className="label">Photos</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.videos ?? 0)}</div>
+          <div className="label">Videos</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.messagesEdited ?? 0)}</div>
+          <div className="label">Messages edited</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.replies ?? 0)}</div>
+          <div className="label">Replies</div>
+        </div>
       </div>
+      {(user.stats.topReactedToName || user.stats.topReactedToId) && user.stats.topReactedToId && (
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          Most reactions given to: <a href={`/users/${encodeURIComponent(user.stats.topReactedToId)}`}>{user.stats.topReactedToName || user.stats.topReactedToId}</a>
+        </p>
+      )}
 
       <div className="filters">
         <label>
