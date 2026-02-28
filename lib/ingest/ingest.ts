@@ -48,7 +48,7 @@ export async function ingestExport(data: TelegramExport, filename: string): Prom
       }
     }
   }
-  for (const [from_id, display_name] of userMap) {
+  for (const [from_id, display_name] of Array.from(userMap.entries())) {
     await pool.query(
       `INSERT INTO users (from_id, display_name, updated_at)
        VALUES ($1, $2, NOW())
