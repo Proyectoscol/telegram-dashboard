@@ -31,3 +31,14 @@ npm start
 - **User profile**: Per-user stats, messages/reactions over time, recent messages, “who they react to,” and CRM: In Premium toggle, assigned to, notes, and call log (Call 1–10) with notes, objections, and plans discussed.
 
 All UI copy is in English.
+
+## Production (Docker)
+
+Build and run with Docker. Pass your Postgres URL at runtime:
+
+```bash
+docker build -t telegram-dashboard .
+docker run -p 3001:3001 -e DATABASE_URL="postgres://user:pass@host:5432/dbname?sslmode=disable" telegram-dashboard
+```
+
+The app listens on **port 3001** and creates the database schema on first request. Then open **Import** and upload your first `result.json`.
