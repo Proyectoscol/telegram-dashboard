@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ChatSelector } from '@/components/ChatSelector';
+import { LoadingCard } from '@/components/Loading';
 import { Pagination, PAGE_SIZE } from '@/components/Pagination';
 
 interface UserRow {
@@ -108,7 +109,7 @@ export default function ContactsPage() {
     return selectedChatIds.length > 0 ? `${base}?chatIds=${selectedChatIds.join(',')}` : base;
   };
 
-  if (loading) return <div className="card">Loading…</div>;
+  if (loading) return <LoadingCard message="Loading contacts…" />;
   if (error) return <div className="alert alert-error">{error}</div>;
 
   return (

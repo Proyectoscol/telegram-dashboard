@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { LoadingSpinner } from '@/components/Loading';
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -144,7 +145,14 @@ export default function ImportPage() {
             </>
           )}
           <button type="submit" className="btn" disabled={!file || loading}>
-            {loading ? 'Uploading…' : 'Upload and import'}
+            {loading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Uploading…
+              </span>
+            ) : (
+              'Upload and import'
+            )}
           </button>
         </form>
       </section>
@@ -192,7 +200,14 @@ export default function ImportPage() {
             </>
           )}
           <button type="submit" className="btn" disabled={!userFile || userLoading}>
-            {userLoading ? 'Uploading…' : 'Upload and update users'}
+            {userLoading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Uploading…
+              </span>
+            ) : (
+              'Upload and update users'
+            )}
           </button>
         </form>
       </section>

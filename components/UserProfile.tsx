@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
+import { LoadingCard, LoadingSpinner } from '@/components/Loading';
 
 interface UserProfileProps {
   fromId?: string;
@@ -362,7 +363,7 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     }
   };
 
-  if (loading) return <div className="card">Loading…</div>;
+  if (loading) return <LoadingCard message="Loading profile…" />;
   if (error) return <div className="alert alert-error">{error}</div>;
   if (!user) return <div className="card">User not found.</div>;
 
@@ -458,7 +459,12 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
 
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>{personaLabels.title}</h2>
-        {personaLoading && !persona && <p style={{ color: '#8b98a5' }}>Loading persona…</p>}
+        {personaLoading && !persona && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
+            <LoadingSpinner size="sm" />
+            <span>Loading persona…</span>
+          </div>
+        )}
         {personaError && <p style={{ color: '#f91854', marginBottom: '0.75rem' }}>{personaError}</p>}
         {!personaLoading && !persona && (
           <>
@@ -844,7 +850,10 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
             <div className="modal-body">
               {modalPoint.type === 'messages' ? (
                 periodDetailLoading ? (
-                  <p style={{ color: '#8b98a5' }}>Loading…</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
+                    <LoadingSpinner size="sm" />
+                    <span>Loading…</span>
+                  </div>
                 ) : periodDetail ? (
                   <>
                     <section>
@@ -858,7 +867,10 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                         </p>
                       )}
                       {dayInsightLoading ? (
-                        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5', fontSize: '0.875rem' }}>
+                          <LoadingSpinner size="sm" />
+                          <span>Loading…</span>
+                        </div>
                       ) : dayInsight ? (
                         <>
                           <p style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>{dayInsight.summary}</p>
@@ -943,7 +955,10 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                 )
               ) : (
                 periodReactionsLoading ? (
-                  <p style={{ color: '#8b98a5' }}>Loading…</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
+                    <LoadingSpinner size="sm" />
+                    <span>Loading…</span>
+                  </div>
                 ) : periodReactionsDetail ? (
                   <>
                     <section>
@@ -957,7 +972,10 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                         </p>
                       )}
                       {dayInsightLoading ? (
-                        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5', fontSize: '0.875rem' }}>
+                          <LoadingSpinner size="sm" />
+                          <span>Loading…</span>
+                        </div>
                       ) : dayInsight ? (
                         <>
                           <p style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>{dayInsight.summary}</p>
@@ -1085,7 +1103,12 @@ function UserMessagesList({ fromId, chatIds, initialMessages }: { fromId: string
       .catch((e) => { if (!(e instanceof DOMException && e.name === 'AbortError')) setData(null); });
     return () => controller.abort();
   }, [fromId, chatIds]);
-  if (!data) return <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>;
+  if (!data) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5', fontSize: '0.875rem' }}>
+      <LoadingSpinner size="sm" />
+      <span>Loading…</span>
+    </div>
+  );
   if (data.messages.length === 0) return <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>No messages.</p>;
   return (
     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>

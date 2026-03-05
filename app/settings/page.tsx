@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ChatSelector } from '@/components/ChatSelector';
+import { LoadingCard } from '@/components/Loading';
 import { LogoutButton } from '@/components/LogoutButton';
 
 export default function SettingsPage() {
@@ -275,9 +276,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="card">
-        <p>Loading settings…</p>
-      </div>
+      <LoadingCard message="Loading settings…" />
     );
   }
 

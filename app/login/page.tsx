@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { LoadingSpinner } from '@/components/Loading';
 
 function LoginForm() {
   const router = useRouter();
@@ -61,7 +62,8 @@ function LoginForm() {
   if (configMissing === null) {
     return (
       <div className="login-wrap">
-        <div className="login-card">
+        <div className="login-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+          <LoadingSpinner />
           <p className="login-subtitle">Loading…</p>
         </div>
       </div>
@@ -117,7 +119,14 @@ function LoginForm() {
             </div>
           </label>
           <button type="submit" className="login-submit" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Signing in…
+              </span>
+            ) : (
+              'Sign in'
+            )}
           </button>
         </form>
         <p className="login-forgot">
@@ -130,7 +139,14 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="login-wrap"><div className="login-card"><p className="login-subtitle">Loading…</p></div></div>}>
+    <Suspense fallback={
+      <div className="login-wrap">
+        <div className="login-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+          <LoadingSpinner />
+          <p className="login-subtitle">Loading…</p>
+        </div>
+      </div>
+    }>
       <LoginForm />
     </Suspense>
   );

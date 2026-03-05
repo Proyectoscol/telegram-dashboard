@@ -13,6 +13,7 @@ import {
   AreaChart,
 } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
+import { LoadingCard, LoadingOverlay, LoadingSpinner } from '@/components/Loading';
 import { Pagination, PAGE_SIZE } from '@/components/Pagination';
 
 interface Kpi {
@@ -266,8 +267,16 @@ export function Dashboard() {
     return () => ctrl.abort();
   }, [modalPoint, groupBy, selectedChatIds, fromId]);
 
+  // Pagination reset: same order every render (no conditional hooks).
+  useEffect(() => {
+    setActivityPage(1);
+  }, [activitySearch, activitySortBy, activitySortDir, selectedChatIds, fromId, start, end]);
+  useEffect(() => {
+    setInactivePage(1);
+  }, [activitySearch, selectedChatIds, fromId, start, end, usersSummary.length]);
+
   if (loading && !data) {
-    return <div className="card">Loading…</div>;
+    return <LoadingCard message="Loading dashboard…" />;
   }
   if (error) {
     return <div className="alert alert-error">{error}</div>;
@@ -358,14 +367,6 @@ export function Dashboard() {
   );
   const inactivePaged = inactiveSorted.slice((inactivePage - 1) * PAGE_SIZE, inactivePage * PAGE_SIZE);
 
-  // Reset pagination when filters, sort, or search change
-  useEffect(() => {
-    setActivityPage(1);
-  }, [activitySearch, activitySortBy, activitySortDir, selectedChatIds, fromId, start, end]);
-  useEffect(() => {
-    setInactivePage(1);
-  }, [activitySearch, selectedChatIds, fromId, start, end, inactiveFiltered.length]);
-
   return (
     <>
       <div className="filters">
@@ -428,6 +429,7 @@ export function Dashboard() {
         ) : null}
       </div>
 
+      <LoadingOverlay active={loading && !!data} message="Updating…">
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="value">{data.kpi.totalMessages.toLocaleString()}</div>
@@ -529,7 +531,10 @@ export function Dashboard() {
             <div className="modal-body">
               {modalPoint.type === 'messages' ? (
                 periodDetailLoading ? (
-                  <p style={{ color: '#8b98a5' }}>Loading…</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
+                    <LoadingSpinner size="sm" />
+                    <span>Loading…</span>
+                  </div>
                 ) : periodDetail ? (
                   <>
                     <section>
@@ -543,7 +548,10 @@ export function Dashboard() {
                         </p>
                       )}
                       {dayInsightLoading ? (
-                        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5', fontSize: '0.875rem' }}>
+                          <LoadingSpinner size="sm" />
+                          <span>Loading…</span>
+                        </div>
                       ) : dayInsight ? (
                         <>
                           <p style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>{dayInsight.summary}</p>
@@ -630,7 +638,10 @@ export function Dashboard() {
                 )
               ) : (
                 periodReactionsLoading ? (
-                  <p style={{ color: '#8b98a5' }}>Loading…</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
+                    <LoadingSpinner size="sm" />
+                    <span>Loading…</span>
+                  </div>
                 ) : periodReactionsDetail ? (
                   <>
                     <section>
@@ -644,7 +655,10 @@ export function Dashboard() {
                         </p>
                       )}
                       {dayInsightLoading ? (
-                        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5', fontSize: '0.875rem' }}>
+                          <LoadingSpinner size="sm" />
+                          <span>Loading…</span>
+                        </div>
                       ) : dayInsight ? (
                         <>
                           <p style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>{dayInsight.summary}</p>
@@ -983,6 +997,7 @@ export function Dashboard() {
           </p>
         )}
       </div>
+      </LoadingOverlay>
     </>
   );
 }
