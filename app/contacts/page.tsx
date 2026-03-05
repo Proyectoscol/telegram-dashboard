@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ChatSelector } from '@/components/ChatSelector';
+import { Pagination, PAGE_SIZE } from '@/components/Pagination';
 
 interface UserRow {
   id: number;
@@ -31,6 +32,7 @@ export default function ContactsPage() {
   type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'assigned_to' | 'last_activity' | 'call_count' | 'last_call_at' | 'messages_sent' | 'reactions_received' | 'reactions_given';
   const [contactsSortBy, setContactsSortBy] = useState<ContactsSortKey>('last_activity');
   const [contactsSortDir, setContactsSortDir] = useState<'asc' | 'desc'>('desc');
+  const [contactsPage, setContactsPage] = useState(1);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -58,6 +60,11 @@ export default function ContactsPage() {
       .finally(() => setLoading(false));
     return () => ctrl.abort();
   }, [filterPremium, selectedChatIds]);
+
+  // Reset to page 1 when filters, sort, or search change
+  useEffect(() => {
+    setContactsPage(1);
+  }, [contactsSearch, contactsSortBy, contactsSortDir, filterPremium, selectedChatIds, users.length]);
 
   const formatDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -93,6 +100,8 @@ export default function ContactsPage() {
     const n = (va as number) - (vb as number);
     return contactsSortDir === 'asc' ? n : -n;
   });
+
+  const contactsPaged = contactsSorted.slice((contactsPage - 1) * PAGE_SIZE, contactsPage * PAGE_SIZE);
 
   const profileHref = (u: UserRow) => {
     const base = u.from_id ? `/users/${encodeURIComponent(u.from_id)}` : `/users/by-id/${u.id}`;
@@ -200,13 +209,13 @@ export default function ContactsPage() {
               </tr>
             </thead>
             <tbody>
-              {contactsSorted.map((u, index) => (
+              {contactsPaged.map((u, index) => (
                 <tr
                   key={u.id}
                   style={{ cursor: 'pointer' }}
                   onClick={() => window.location.assign(profileHref(u))}
                 >
-                  <td style={{ color: '#8b98a5' }}>{index + 1}</td>
+                  <td style={{ color: '#8b98a5' }}>{(contactsPage - 1) * PAGE_SIZE + index + 1}</td>
                   <td>
                     <a
                       href={profileHref(u)}
@@ -272,6 +281,14 @@ export default function ContactsPage() {
         )}
         {users.length > 0 && contactsSearch.length >= 3 && filteredUsers.length === 0 && (
           <p style={{ color: '#8b98a5', padding: '1rem 0' }}>No contacts match your search.</p>
+        )}
+        {contactsSorted.length > 0 && (
+          <Pagination
+            currentPage={contactsPage}
+            totalItems={contactsSorted.length}
+            onPageChange={setContactsPage}
+            itemLabel="contacts"
+          />
         )}
       </div>
     </div>

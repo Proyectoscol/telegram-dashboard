@@ -13,6 +13,7 @@ import {
   AreaChart,
 } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
+import { Pagination, PAGE_SIZE } from '@/components/Pagination';
 
 interface Kpi {
   totalMessages: number;
@@ -167,6 +168,8 @@ export function Dashboard() {
   type ActivitySortKey = 'is_premium' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'photos' | 'videos' | 'files' | 'audios' | 'messages_edited' | 'replies' | 'total_words' | 'total_chars' | 'first_activity' | 'last_activity' | 'active_days' | 'reactions_ratio';
   const [activitySortBy, setActivitySortBy] = useState<ActivitySortKey>('messages_sent');
   const [activitySortDir, setActivitySortDir] = useState<'asc' | 'desc'>('desc');
+  const [activityPage, setActivityPage] = useState(1);
+  const [inactivePage, setInactivePage] = useState(1);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
   const start = range.start;
   const end = range.end;
@@ -348,6 +351,20 @@ export function Dashboard() {
     const n = (va as number) - (vb as number);
     return activitySortDir === 'asc' ? n : -n;
   });
+  const activityPaged = activitySorted.slice((activityPage - 1) * PAGE_SIZE, activityPage * PAGE_SIZE);
+
+  const inactiveSorted = [...inactiveFiltered].sort((a, b) =>
+    (a.display_name || a.from_id).localeCompare(b.display_name || b.from_id)
+  );
+  const inactivePaged = inactiveSorted.slice((inactivePage - 1) * PAGE_SIZE, inactivePage * PAGE_SIZE);
+
+  // Reset pagination when filters, sort, or search change
+  useEffect(() => {
+    setActivityPage(1);
+  }, [activitySearch, activitySortBy, activitySortDir, selectedChatIds, fromId, start, end]);
+  useEffect(() => {
+    setInactivePage(1);
+  }, [activitySearch, selectedChatIds, fromId, start, end, inactiveFiltered.length]);
 
   return (
     <>
@@ -847,13 +864,13 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {activitySorted.map((u, index) => (
+              {activityPaged.map((u, index) => (
                 <tr
                   key={u.from_id}
                   style={{ cursor: 'pointer' }}
                   onClick={() => window.location.assign(`/users/${encodeURIComponent(u.from_id)}`)}
                 >
-                  <td style={{ color: '#8b98a5' }}>{index + 1}</td>
+                  <td style={{ color: '#8b98a5' }}>{(activityPage - 1) * PAGE_SIZE + index + 1}</td>
                   <td>
                     <a
                       href={`/users/${encodeURIComponent(u.from_id)}`}
@@ -897,6 +914,14 @@ export function Dashboard() {
         {activeUsers.length > 0 && activitySearch.length >= 3 && activityFiltered.length === 0 && (
           <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginTop: '0.5rem' }}>No contacts match your search.</p>
         )}
+        {activitySorted.length > 0 && (
+          <Pagination
+            currentPage={activityPage}
+            totalItems={activitySorted.length}
+            onPageChange={setActivityPage}
+            itemLabel="active contacts"
+          />
+        )}
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '0.75rem' }}>
           <a href="/contacts">Full contacts table</a> with CRM and call logging.
         </p>
@@ -913,25 +938,23 @@ export function Dashboard() {
             : `${inactiveUsers.length} inactive user${inactiveUsers.length === 1 ? '' : 's'}`}
         </div>
         {inactiveFiltered.length > 0 ? (
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Contact</th>
-                  <th>Premium</th>
-                  <th>Messages</th>
-                  <th>Reactions given</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {inactiveFiltered
-                  .slice()
-                  .sort((a, b) => (a.display_name || a.from_id).localeCompare(b.display_name || b.from_id))
-                  .map((u, index) => (
+          <>
+            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Contact</th>
+                    <th>Premium</th>
+                    <th>Messages</th>
+                    <th>Reactions given</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inactivePaged.map((u, index) => (
                     <tr key={u.from_id}>
-                      <td style={{ color: '#8b98a5' }}>{index + 1}</td>
+                      <td style={{ color: '#8b98a5' }}>{(inactivePage - 1) * PAGE_SIZE + index + 1}</td>
                       <td>
                         {u.display_name || u.from_id}
                         {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
@@ -944,9 +967,16 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={inactivePage}
+              totalItems={inactiveSorted.length}
+              onPageChange={setInactivePage}
+              itemLabel="inactive users"
+            />
+          </>
         ) : (
           <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
             {activitySearch.length >= 3 ? 'No inactive users match your search.' : 'No inactive users for this range.'}
