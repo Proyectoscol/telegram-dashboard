@@ -1,0 +1,13 @@
+node_modules
+.next
+.env*.local
+.env
+*.log
+.DS_Store
+scripts/users-list-import.sql
+**/result.json
+**/userslist.md
+**/*.xlsx
+**/messages*.html
+**/telegram*statistics*.xlsx
+**/estadisticas*.xlsx

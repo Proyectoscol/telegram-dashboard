@@ -1,0 +1,1105 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChatSelector } from '@/components/ChatSelector';
+
+interface UserProfileProps {
+  fromId?: string;
+  /** When set, load user by internal id (for list-only users with from_id null). */
+  byId?: number;
+  /** Optional chat IDs to preselect "Filter by chat" (e.g. from Contacts link with ?chatIds=1,2). */
+  initialChatIds?: number[];
+}
+
+interface UserDetail {
+  id: number;
+  from_id: string | null;
+  display_name: string | null;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  is_premium: boolean;
+  telegram_premium?: boolean;
+  telegram_verified?: boolean;
+  telegram_fake?: boolean;
+  telegram_bot?: boolean;
+  telegram_status_type?: string | null;
+  telegram_bio?: string | null;
+  telegram_last_seen?: string | null;
+  assigned_to: string | null;
+  notes: string | null;
+  stats: {
+    messagesSent: number;
+    serviceMessages?: number;
+    totalActivity?: number;
+    reactionsGiven: number;
+    reactionsReceived: number;
+    reactionsRatio?: number;
+    totalWords?: number;
+    totalChars?: number;
+    activeDays?: number;
+    photos?: number;
+    videos?: number;
+    messagesEdited?: number;
+    replies?: number;
+    topReactedToId?: string | null;
+    topReactedToName?: string | null;
+  };
+  calls: {
+    id: number;
+    call_number: number;
+    called_at: string | null;
+    notes: string | null;
+    objections: string | null;
+    plans_discussed: string | null;
+    created_by: string | null;
+    created_at: string;
+  }[];
+}
+
+interface TimeSeries {
+  period: string;
+  count: number;
+}
+
+interface PeriodDetail {
+  periodStart: string;
+  periodEnd: string;
+  count: number;
+  byUser: { from_id: string; display_name: string | null; count: number }[];
+  recentMessages: { date: string; from_id: string | null; display_name: string | null; text: string | null }[];
+}
+
+interface PeriodReactionsDetail {
+  periodStart: string;
+  periodEnd: string;
+  count: number;
+  recentReactions: {
+    reacted_at: string | null;
+    reactor_from_id: string;
+    reactor_name: string | null;
+    emoji: string | null;
+    message_date: string | null;
+    message_author_id: string | null;
+    message_author_name: string | null;
+    message_text: string | null;
+  }[];
+}
+
+interface Persona {
+  id: number;
+  user_id: number;
+  summary: string | null;
+  topics: string[] | null;
+  inferred_age_range: string | null;
+  inferred_occupation: string | null;
+  inferred_goals: string[] | null;
+  social_links: { instagram?: string | null; twitter?: string | null; linkedin?: string | null; other?: string[] } | null;
+  content_preferences: string | null;
+  pain_points: string[] | null;
+  inference_evidence: string | null;
+  model_used: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  run_at: string | null;
+}
+
+export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserProfileProps) {
+  const [user, setUser] = useState<UserDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
+  const [timeSeries, setTimeSeries] = useState<{ messagesOverTime: TimeSeries[]; reactionsOverTime: TimeSeries[] } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showCallForm, setShowCallForm] = useState(false);
+  const [callForm, setCallForm] = useState({
+    call_number: 1,
+    notes: '',
+    objections: '',
+    plans_discussed: '',
+    created_by: '',
+  });
+  const [persona, setPersona] = useState<Persona | null>(null);
+  const [personaLoading, setPersonaLoading] = useState(false);
+  const [personaGenerating, setPersonaGenerating] = useState(false);
+  const [personaError, setPersonaError] = useState<string | null>(null);
+  const [personaLabels, setPersonaLabels] = useState<Record<string, string>>({
+    title: 'AI Buyer Persona',
+    generateBtn: 'Generate persona',
+    regenerating: 'Regenerating…',
+    summary: 'Summary',
+    topics: 'Topics / interests',
+    inferredProfile: 'Inferred profile',
+    contentPreferences: 'Content preferences',
+    painPoints: 'Pain points',
+    evidence: 'Evidence / reasoning',
+    noPersonaYet: 'No persona generated yet. Use AI to build a buyer persona from profile, messages, and reactions.',
+  });
+  const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
+  const [profileChatIds, setProfileChatIds] = useState<number[]>(() => initialChatIds ?? []);
+  const [modalPoint, setModalPoint] = useState<{ period: string; periodLabel: string; count: number; type: 'messages' | 'reactions' } | null>(null);
+  const [periodDetail, setPeriodDetail] = useState<PeriodDetail | null>(null);
+  const [periodReactionsDetail, setPeriodReactionsDetail] = useState<PeriodReactionsDetail | null>(null);
+  const [periodDetailLoading, setPeriodDetailLoading] = useState(false);
+  const [periodReactionsLoading, setPeriodReactionsLoading] = useState(false);
+  const [dayInsight, setDayInsight] = useState<{ summary: string; prompt_tokens?: number; completion_tokens?: number; run_at?: string; scope?: string } | null>(null);
+  const [dayInsightLoading, setDayInsightLoading] = useState(false);
+  const [dayInsightGenerating, setDayInsightGenerating] = useState(false);
+  const [dayInsightError, setDayInsightError] = useState<string | null>(null);
+  // Seeded from /full response so ReactionsGivenList and UserMessagesList don't fetch separately
+  const [_recentMsgs, _setRecentMsgs] = useState<{ chat_id?: number; chat_name?: string | null; chat_slug?: string | null; date: string; text: string | null; [k: string]: unknown }[] | null>(null);
+  const [_reactionsGiven, _setReactionsGiven] = useState<{ chatId: number; chatName: string | null; chatSlug: string | null; receiverFromId: string; receiverName: string | null; count: number }[] | null>(null);
+
+  const fromId = fromIdProp ?? (user?.from_id ?? null);
+
+  const periodBounds = (period: string, g: 'day' | 'week' | 'month') => {
+    const start = new Date(period);
+    const end = new Date(start);
+    if (g === 'day') end.setUTCDate(end.getUTCDate() + 1);
+    else if (g === 'week') end.setUTCDate(end.getUTCDate() + 7);
+    else end.setUTCMonth(end.getUTCMonth() + 1);
+    return { start: start.toISOString(), end: end.toISOString() };
+  };
+
+  // Single aggregated fetch: user + KPI stats + time series + chats + labels
+  // + recentMessages + reactionsGiven in one request.
+  // AbortController cancels in-flight requests on fast navigation (back/forward).
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    const base = byId != null
+      ? `/api/users/by-id/${byId}/full`
+      : `/api/users/${encodeURIComponent(fromIdProp!)}/full`;
+    const params = new URLSearchParams({ groupBy });
+    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    fetch(`${base}?${params}`, { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error('User not found');
+        return r.json();
+      })
+      .then((data) => {
+        setUser(data.user ?? null);
+        setTimeSeries(data.timeSeries ?? null);
+        if (Array.isArray(data.chats)) setChats(data.chats);
+        if (data.labels && typeof data.labels === 'object') {
+          setPersonaLabels((prev) => ({ ...prev, ...data.labels }));
+        }
+        // Seed sub-components from the aggregated payload so they don't fetch separately
+        if (Array.isArray(data.recentMessages)) _setRecentMsgs(data.recentMessages);
+        if (Array.isArray(data.reactionsGiven)) _setReactionsGiven(data.reactionsGiven);
+      })
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        setError(e instanceof Error ? e.message : 'Failed to load user');
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [byId, fromIdProp, profileChatIds, groupBy]);
+
+  useEffect(() => {
+    if (!modalPoint || modalPoint.type !== 'messages') {
+      setPeriodDetail(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const { start, end } = periodBounds(modalPoint.period, groupBy);
+    setPeriodDetailLoading(true);
+    const params = new URLSearchParams({ start, end });
+    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    const fid = user?.from_id ?? null;
+    if (fid) params.set('fromId', fid);
+    fetch(`/api/stats/period-detail?${params}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then(setPeriodDetail)
+      .catch(() => {})
+      .finally(() => setPeriodDetailLoading(false));
+    return () => ctrl.abort();
+  }, [modalPoint, groupBy, profileChatIds, user?.from_id]);
+
+  useEffect(() => {
+    if (!modalPoint || modalPoint.type !== 'reactions') {
+      setPeriodReactionsDetail(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const { start, end } = periodBounds(modalPoint.period, groupBy);
+    setPeriodReactionsLoading(true);
+    const params = new URLSearchParams({ start, end });
+    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    const fid = user?.from_id ?? null;
+    if (fid) params.set('fromId', fid);
+    fetch(`/api/stats/period-reactions?${params}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then(setPeriodReactionsDetail)
+      .catch(() => {})
+      .finally(() => setPeriodReactionsLoading(false));
+    return () => ctrl.abort();
+  }, [modalPoint, groupBy, profileChatIds, user?.from_id]);
+
+  useEffect(() => {
+    if (!modalPoint) {
+      setDayInsight(null);
+      setDayInsightError(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setDayInsightError(null);
+    const { start, end } = periodBounds(modalPoint.period, groupBy);
+    setDayInsightLoading(true);
+    const params = new URLSearchParams({ start, end });
+    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    const fid = user?.from_id ?? null;
+    if (fid) params.set('fromId', fid);
+    fetch(`/api/stats/day-insight?${params}`, { signal: ctrl.signal })
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) {
+          setDayInsightError(data?.error || `Error ${r.status}`);
+          setDayInsight(null);
+        } else {
+          setDayInsightError(null);
+          setDayInsight(data.insight ?? null);
+        }
+      })
+      .catch((e) => { if (e?.name !== 'AbortError') { setDayInsightError(null); setDayInsight(null); } })
+      .finally(() => setDayInsightLoading(false));
+    return () => ctrl.abort();
+  }, [modalPoint, groupBy, profileChatIds, user?.from_id]);
+
+  useEffect(() => {
+    if (!user) return;
+    const controller = new AbortController();
+    setPersonaLoading(true);
+    setPersonaError(null);
+    const url = byId != null ? `/api/users/by-id/${byId}/persona` : `/api/users/${encodeURIComponent(fromId!)}/persona`;
+    fetch(url, { signal: controller.signal })
+      .then((r) => {
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error('Failed to load persona');
+        return r.json();
+      })
+      .then(setPersona)
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        setPersonaError(e instanceof Error ? e.message : 'Failed to load persona');
+      })
+      .finally(() => setPersonaLoading(false));
+    return () => controller.abort();
+  }, [user?.id, byId, fromId]);
+
+  const handlePatch = async (updates: { is_premium?: boolean; assigned_to?: string; notes?: string }) => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const url = byId != null ? `/api/users/by-id/${byId}` : `/api/users/${encodeURIComponent(fromId!)}`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      const updated = await res.json();
+      setUser((u) => (u ? { ...u, ...updated } : null));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmitCall = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
+    try {
+      const url = byId != null ? `/api/users/by-id/${byId}/calls` : `/api/users/${encodeURIComponent(fromId!)}/calls`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...callForm,
+          called_at: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to log call');
+      const newCall = await res.json();
+      setUser((u) => (u ? { ...u, calls: [...u.calls, newCall].sort((a, b) => a.call_number - b.call_number) } : null));
+      setShowCallForm(false);
+      setCallForm({ call_number: 1, notes: '', objections: '', plans_discussed: '', created_by: '' });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to log call');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatPeriod = (p: string | null) =>
+    p ? new Date(p).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '';
+  const formatDate = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+  const handleGeneratePersona = async () => {
+    if (!user) return;
+    setPersonaGenerating(true);
+    setPersonaError(null);
+    try {
+      const url = byId != null ? `/api/users/by-id/${byId}/persona` : `/api/users/${encodeURIComponent(fromId!)}/persona`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate persona');
+      setPersona(data.persona ?? data);
+    } catch (e) {
+      setPersonaError(e instanceof Error ? e.message : 'Failed to generate persona');
+    } finally {
+      setPersonaGenerating(false);
+    }
+  };
+
+  if (loading) return <div className="card">Loading…</div>;
+  if (error) return <div className="alert alert-error">{error}</div>;
+  if (!user) return <div className="card">User not found.</div>;
+
+  const messagesData = (timeSeries?.messagesOverTime ?? []).map((p) => ({
+    ...p,
+    periodLabel: formatPeriod(p.period),
+  }));
+  const reactionsData = (timeSeries?.reactionsOverTime ?? []).map((p) => ({
+    ...p,
+    periodLabel: formatPeriod(p.period),
+  }));
+
+  const usedCallNumbers = user.calls.map((c) => c.call_number);
+
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.display_name || user.from_id;
+
+  return (
+    <div>
+      <div className="user-detail-header">
+        <h1>{fullName}</h1>
+        <a href="/contacts" className="btn btn-secondary">Back to contacts</a>
+      </div>
+
+      {chats.length > 0 && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <ChatSelector
+            chats={chats}
+            selectedIds={profileChatIds}
+            onChange={setProfileChatIds}
+            label="Filter by chat"
+            allChatsLabel="All chats"
+            onlyTheseLabel="Show only these chats:"
+            hint="Applies to stats, charts, messages and reactions on this page."
+          />
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>Profile</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem 2rem' }}>
+          {user.username && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Username</span>
+              <div style={{ fontWeight: 600 }}>@{user.username}</div>
+            </div>
+          )}
+          {user.first_name != null && user.first_name !== '' && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First name</span>
+              <div>{user.first_name}</div>
+            </div>
+          )}
+          {user.last_name != null && user.last_name !== '' && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last name</span>
+              <div>{user.last_name}</div>
+            </div>
+          )}
+          {user.phone && (
+            <div>
+              <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</span>
+              <div>{user.phone}</div>
+            </div>
+          )}
+          <div>
+            <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>User ID</span>
+            <div><code style={{ fontSize: '0.875rem' }}>{user.from_id ?? '—'}</code></div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1rem', marginBottom: user.telegram_bio ? '1rem' : 0 }}>
+          {user.telegram_premium && (
+            <span className="badge" style={{ background: 'linear-gradient(135deg, #0088cc 0%, #00a2e8 100%)', color: '#fff' }}>Telegram Premium</span>
+          )}
+          {user.telegram_verified && <span className="badge" style={{ background: '#00ba7c', color: '#fff' }}>Verified</span>}
+          {user.telegram_fake && <span className="badge" style={{ background: '#f90', color: '#000' }}>Fake</span>}
+          {user.telegram_bot && <span className="badge" style={{ background: '#2f3336', color: '#8b98a5' }}>Bot</span>}
+          {user.telegram_status_type && (
+            <span className="badge badge-default">Status: {user.telegram_status_type}</span>
+          )}
+          {user.telegram_last_seen && (
+            <span style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>
+              Last seen: {formatDate(user.telegram_last_seen)}
+            </span>
+          )}
+        </div>
+        {user.telegram_bio && (
+          <div style={{ marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid #2f3336' }}>
+            <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bio</span>
+            <p style={{ margin: '0.35rem 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>{user.telegram_bio}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>{personaLabels.title}</h2>
+        {personaLoading && !persona && <p style={{ color: '#8b98a5' }}>Loading persona…</p>}
+        {personaError && <p style={{ color: '#f91854', marginBottom: '0.75rem' }}>{personaError}</p>}
+        {!personaLoading && !persona && (
+          <>
+            <p style={{ color: '#8b98a5', marginBottom: '1rem' }}>{personaLabels.noPersonaYet}</p>
+            <button type="button" className="btn btn-primary" onClick={handleGeneratePersona} disabled={personaGenerating}>
+              {personaGenerating ? personaLabels.regenerating : personaLabels.generateBtn}
+            </button>
+          </>
+        )}
+        {persona && (
+          <>
+            {persona.summary && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.summary}</span>
+                <p style={{ margin: '0.35rem 0 0', lineHeight: 1.5 }}>{persona.summary}</p>
+              </div>
+            )}
+            {persona.topics && Array.isArray(persona.topics) && persona.topics.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.topics}</span>
+                <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  {(persona.topics as string[]).map((t) => (
+                    <span key={t} className="badge badge-default">{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(persona.inferred_age_range || persona.inferred_occupation || (persona.inferred_goals && (persona.inferred_goals as string[]).length > 0)) && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.inferredProfile}</span>
+                <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                  {persona.inferred_age_range && <span>Age range: {persona.inferred_age_range}</span>}
+                  {persona.inferred_occupation && <span>Occupation: {persona.inferred_occupation}</span>}
+                  {persona.inferred_goals && Array.isArray(persona.inferred_goals) && (persona.inferred_goals as string[]).length > 0 && (
+                    <span>Goals: {(persona.inferred_goals as string[]).join(', ')}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {persona.social_links && typeof persona.social_links === 'object' && (
+              (persona.social_links.instagram || persona.social_links.twitter || persona.social_links.linkedin || (persona.social_links.other && persona.social_links.other.length > 0)) && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Social links</span>
+                  <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    {persona.social_links.instagram && <span>Instagram: {persona.social_links.instagram}</span>}
+                    {persona.social_links.twitter && <span>Twitter: {persona.social_links.twitter}</span>}
+                    {persona.social_links.linkedin && <span>LinkedIn: {persona.social_links.linkedin}</span>}
+                    {persona.social_links.other && (persona.social_links.other as string[]).map((o) => <span key={o}>{o}</span>)}
+                  </div>
+                </div>
+              )
+            )}
+            {persona.content_preferences && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.contentPreferences}</span>
+                <p style={{ margin: '0.35rem 0 0', lineHeight: 1.5 }}>{persona.content_preferences}</p>
+              </div>
+            )}
+            {persona.pain_points && Array.isArray(persona.pain_points) && (persona.pain_points as string[]).length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.painPoints}</span>
+                <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>{(persona.pain_points as string[]).map((pp) => <li key={pp}>{pp}</li>)}</ul>
+              </div>
+            )}
+            {persona.inference_evidence && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{ color: '#8b98a5', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{personaLabels.evidence}</span>
+                <div style={{ margin: '0.35rem 0 0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{persona.inference_evidence}</div>
+              </div>
+            )}
+            <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '1rem', marginBottom: 0 }}>
+              Last run: {persona.run_at ? formatDate(persona.run_at) : '—'}
+              {persona.model_used && ` · Model: ${persona.model_used}`}
+              {(persona.prompt_tokens != null || persona.completion_tokens != null) && (
+                <> · {persona.prompt_tokens ?? 0} in / {persona.completion_tokens ?? 0} out tokens</>
+              )}
+            </p>
+            <button type="button" className="btn btn-secondary" style={{ marginTop: '0.75rem' }} onClick={handleGeneratePersona} disabled={personaGenerating}>
+              {personaGenerating ? personaLabels.regenerating : personaLabels.generateBtn}
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="stats-row">
+        <div className="kpi-card">
+          <div className="value">{user.stats.messagesSent.toLocaleString()}</div>
+          <div className="label">Messages sent</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.serviceMessages ?? 0).toLocaleString()}</div>
+          <div className="label">Service messages</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{user.stats.reactionsGiven.toLocaleString()}</div>
+          <div className="label">Reactions given</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{user.stats.reactionsReceived.toLocaleString()}</div>
+          <div className="label">Reactions received</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.reactionsRatio ?? 0)}</div>
+          <div className="label">Reactions / message ratio</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.totalWords ?? 0).toLocaleString()}</div>
+          <div className="label">Total words</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.totalChars ?? 0).toLocaleString()}</div>
+          <div className="label">Total characters</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.activeDays ?? 0).toLocaleString()}</div>
+          <div className="label">Active days</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.photos ?? 0)}</div>
+          <div className="label">Photos</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.videos ?? 0)}</div>
+          <div className="label">Videos</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.messagesEdited ?? 0)}</div>
+          <div className="label">Messages edited</div>
+        </div>
+        <div className="kpi-card">
+          <div className="value">{(user.stats.replies ?? 0)}</div>
+          <div className="label">Replies</div>
+        </div>
+      </div>
+      {(user.stats.topReactedToName || user.stats.topReactedToId) && user.stats.topReactedToId && (
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          Most reactions given to: <a href={`/users/${encodeURIComponent(user.stats.topReactedToId)}`}>{user.stats.topReactedToName || user.stats.topReactedToId}</a>
+        </p>
+      )}
+
+      <div className="filters">
+        <label>
+          Group by
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'day' | 'week' | 'month')}>
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="card">
+        <h2>Messages over time (this user)</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+          Click a point to see messages for that day.
+        </p>
+        <div className="chart-container">
+          {messagesData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={messagesData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2f3336" />
+                <XAxis dataKey="periodLabel" stroke="#8b98a5" fontSize={12} />
+                <YAxis stroke="#8b98a5" fontSize={12} />
+                <Tooltip
+                  contentStyle={{ background: '#16181c', border: '1px solid #2f3336', borderRadius: 8 }}
+                  formatter={(value: number) => [value, 'Messages']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#1d9bf0"
+                  fill="#1d9bf0"
+                  fillOpacity={0.3}
+                  dot={{ r: 4, cursor: 'pointer' }}
+                  activeDot={{
+                    r: 6,
+                    cursor: 'pointer',
+                    onClick: (_e: unknown, payload: unknown) => {
+                      const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload
+                        ?? (payload as { period?: string; periodLabel?: string; count?: number });
+                      if (p?.period != null) setModalPoint({
+                        period: p.period,
+                        periodLabel: p.periodLabel ?? formatPeriod(p.period),
+                        count: p.count ?? 0,
+                        type: 'messages',
+                      });
+                    },
+                  }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8b98a5' }}>
+              No message data.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Reactions over time (this user)</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+          Click a point to see reactions for that day.
+        </p>
+        <div className="chart-container">
+          {reactionsData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={reactionsData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2f3336" />
+                <XAxis dataKey="periodLabel" stroke="#8b98a5" fontSize={12} />
+                <YAxis stroke="#8b98a5" fontSize={12} />
+                <Tooltip
+                  contentStyle={{ background: '#16181c', border: '1px solid #2f3336', borderRadius: 8 }}
+                  formatter={(value: number) => [value, 'Reactions']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#00ba7c"
+                  fill="#00ba7c"
+                  fillOpacity={0.3}
+                  dot={{ r: 4, cursor: 'pointer' }}
+                  activeDot={{
+                    r: 6,
+                    cursor: 'pointer',
+                    onClick: (_e: unknown, payload: unknown) => {
+                      const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload
+                        ?? (payload as { period?: string; periodLabel?: string; count?: number });
+                      if (p?.period != null) setModalPoint({
+                        period: p.period,
+                        periodLabel: p.periodLabel ?? formatPeriod(p.period),
+                        count: p.count ?? 0,
+                        type: 'reactions',
+                      });
+                    },
+                  }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8b98a5' }}>
+              No reaction data.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>CRM &amp; follow-up</h2>
+        <div className="form-group">
+          <div className="toggle-wrap">
+            <input
+              type="checkbox"
+              id="is_premium"
+              checked={user.is_premium}
+              onChange={(e) => handlePatch({ is_premium: e.target.checked })}
+              disabled={saving}
+            />
+            <label htmlFor="is_premium">In Premium</label>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Assigned to</label>
+          <input
+            type="text"
+            value={user.assigned_to ?? ''}
+            onChange={(e) => setUser((u) => (u ? { ...u, assigned_to: e.target.value || null } : null))}
+            onBlur={() => handlePatch({ assigned_to: user.assigned_to ?? '' })}
+            placeholder="Operator name"
+          />
+        </div>
+        <div className="form-group">
+          <label>Notes</label>
+          <textarea
+            value={user.notes ?? ''}
+            onChange={(e) => setUser((u) => (u ? { ...u, notes: e.target.value || null } : null))}
+            onBlur={() => handlePatch({ notes: user.notes ?? '' })}
+            placeholder="Free-form notes about this contact"
+          />
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Calls (upsell follow-up)</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          Log calls 1–10 with notes, objections, and plans discussed.
+        </p>
+        {!showCallForm ? (
+          <button type="button" className="btn" onClick={() => setShowCallForm(true)} disabled={user.calls.length >= 10}>
+            Log call
+          </button>
+        ) : (
+          <form onSubmit={handleSubmitCall}>
+            <div className="form-group">
+              <label>Call number (1–10)</label>
+              <select
+                value={callForm.call_number}
+                onChange={(e) => setCallForm((f) => ({ ...f, call_number: Number(e.target.value) }))}
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  <option key={n} value={n} disabled={usedCallNumbers.includes(n)}>
+                    Call {n} {usedCallNumbers.includes(n) ? '(already logged)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Notes (what was discussed)</label>
+              <textarea
+                value={callForm.notes}
+                onChange={(e) => setCallForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="What was discussed in the call"
+              />
+            </div>
+            <div className="form-group">
+              <label>Objections</label>
+              <textarea
+                value={callForm.objections}
+                onChange={(e) => setCallForm((f) => ({ ...f, objections: e.target.value }))}
+                placeholder="Why they haven't joined Premium / payment concerns"
+              />
+            </div>
+            <div className="form-group">
+              <label>Plans discussed</label>
+              <textarea
+                value={callForm.plans_discussed}
+                onChange={(e) => setCallForm((f) => ({ ...f, plans_discussed: e.target.value }))}
+                placeholder="Payment plans, offers, etc."
+              />
+            </div>
+            <div className="form-group">
+              <label>Created by</label>
+              <input
+                type="text"
+                value={callForm.created_by}
+                onChange={(e) => setCallForm((f) => ({ ...f, created_by: e.target.value }))}
+                placeholder="Operator name"
+              />
+            </div>
+            <button type="submit" className="btn" disabled={saving}>Save call</button>
+            <button type="button" className="btn btn-secondary" style={{ marginLeft: '0.5rem' }} onClick={() => setShowCallForm(false)}>
+              Cancel
+            </button>
+          </form>
+        )}
+
+        <ul className="calls-list" style={{ marginTop: '1.5rem' }}>
+          {user.calls.map((c) => (
+            <li key={c.id}>
+              <div className="call-meta">
+                Call {c.call_number} · {formatDate(c.called_at)} · {c.created_by || '—'}
+              </div>
+              {c.notes && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Notes:</strong> {c.notes}</p>}
+              {c.objections && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Objections:</strong> {c.objections}</p>}
+              {c.plans_discussed && <p style={{ margin: '0.35rem 0', fontSize: '0.875rem' }}><strong>Plans discussed:</strong> {c.plans_discussed}</p>}
+            </li>
+          ))}
+        </ul>
+        {user.calls.length === 0 && !showCallForm && (
+          <p style={{ color: '#8b98a5', marginTop: '1rem', fontSize: '0.875rem' }}>No calls logged yet.</p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Reactions given (who they react to)</h2>
+        {fromId ? <ReactionsGivenList fromId={fromId} chatIds={profileChatIds.length > 0 ? profileChatIds : undefined} initialData={profileChatIds.length === 0 ? _reactionsGiven : null} /> : <p style={{ color: '#8b98a5' }}>No Telegram ID yet (list-only contact). Stats and lists will appear after they interact and you re-import.</p>}
+      </div>
+
+      <div className="card">
+        <h2>Recent messages</h2>
+        {fromId ? <UserMessagesList fromId={fromId} chatIds={profileChatIds.length > 0 ? profileChatIds : undefined} initialMessages={profileChatIds.length === 0 ? _recentMsgs : null} /> : null}
+      </div>
+
+      {modalPoint && (
+        <div className="modal-backdrop" onClick={() => setModalPoint(null)} role="presentation">
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{modalPoint.type === 'reactions' ? 'Reactions' : 'Messages'}: {modalPoint.periodLabel}</h3>
+              <button type="button" className="modal-close" onClick={() => setModalPoint(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              {modalPoint.type === 'messages' ? (
+                periodDetailLoading ? (
+                  <p style={{ color: '#8b98a5' }}>Loading…</p>
+                ) : periodDetail ? (
+                  <>
+                    <section>
+                      <strong>{periodDetail.count.toLocaleString()}</strong> message{periodDetail.count !== 1 ? 's' : ''} in this period.
+                    </section>
+                    <section>
+                      <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>AI insight — why this day?</h4>
+                      {dayInsightError && (
+                        <p style={{ color: '#f91854', fontSize: '0.875rem', marginBottom: '0.5rem', background: 'rgba(249,24,84,0.1)', padding: '0.5rem', borderRadius: 6 }} role="alert">
+                          {dayInsightError}
+                        </p>
+                      )}
+                      {dayInsightLoading ? (
+                        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+                      ) : dayInsight ? (
+                        <>
+                          <p style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>{dayInsight.summary}</p>
+                          <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: 0 }}>
+                            Analysis for this contact on this day.
+                            {(dayInsight.prompt_tokens != null || dayInsight.completion_tokens != null) && (
+                              <> · {dayInsight.prompt_tokens ?? 0} in / {dayInsight.completion_tokens ?? 0} out tokens</>
+                            )}
+                            {dayInsight.run_at && <> · {new Date(dayInsight.run_at).toLocaleString('en-US')}</>}
+                          </p>
+                        </>
+                      ) : (
+                        <div>
+                          <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                            Generate an AI analysis of why this contact had activity this day.
+                          </p>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={dayInsightGenerating}
+                            onClick={async () => {
+                              if (!modalPoint) return;
+                              setDayInsightError(null);
+                              setDayInsightGenerating(true);
+                              try {
+                                const { start, end } = periodBounds(modalPoint.period, groupBy);
+                                const params = new URLSearchParams({ start, end });
+                                profileChatIds.forEach((id) => params.append('chatId', String(id)));
+                                const fid = user?.from_id ?? null;
+                                if (fid) params.set('fromId', fid);
+                                const res = await fetch(`/api/stats/day-insight?${params}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Failed to generate');
+                                setDayInsight(data.insight ?? null);
+                              } catch (e) {
+                                setDayInsight(null);
+                                setDayInsightError(e instanceof Error ? e.message : 'Failed to generate');
+                              } finally {
+                                setDayInsightGenerating(false);
+                              }
+                            }}
+                          >
+                            {dayInsightGenerating ? 'Generating…' : 'Generate insight'}
+                          </button>
+                        </div>
+                      )}
+                    </section>
+                    {periodDetail.byUser.length > 0 && (
+                      <section>
+                        <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>By user</h4>
+                        <table className="by-user-table">
+                          <thead>
+                            <tr><th>User</th><th>Messages</th></tr>
+                          </thead>
+                          <tbody>
+                            {periodDetail.byUser.map((u) => (
+                              <tr key={u.from_id}>
+                                <td>{u.display_name || u.from_id}</td>
+                                <td>{u.count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </section>
+                    )}
+                    {periodDetail.recentMessages.length > 0 && (
+                      <section>
+                        <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>Messages (scroll to see all)</h4>
+                        {periodDetail.recentMessages.map((m, i) => (
+                          <div key={i} className="recent-msg">
+                            <div className="meta">
+                              {m.date ? new Date(m.date).toLocaleString('en-US') : ''} · {m.display_name || m.from_id || '—'}
+                            </div>
+                            <div className="text">{(m.text || '').slice(0, 200)}{(m.text && m.text.length > 200) ? '…' : ''}</div>
+                          </div>
+                        ))}
+                      </section>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ color: '#8b98a5' }}>Could not load period details.</p>
+                )
+              ) : (
+                periodReactionsLoading ? (
+                  <p style={{ color: '#8b98a5' }}>Loading…</p>
+                ) : periodReactionsDetail ? (
+                  <>
+                    <section>
+                      <strong>{periodReactionsDetail.count.toLocaleString()}</strong> reaction{periodReactionsDetail.count !== 1 ? 's' : ''} in this period.
+                    </section>
+                    <section>
+                      <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>AI insight — why this day?</h4>
+                      {dayInsightError && (
+                        <p style={{ color: '#f91854', fontSize: '0.875rem', marginBottom: '0.5rem', background: 'rgba(249,24,84,0.1)', padding: '0.5rem', borderRadius: 6 }} role="alert">
+                          {dayInsightError}
+                        </p>
+                      )}
+                      {dayInsightLoading ? (
+                        <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>
+                      ) : dayInsight ? (
+                        <>
+                          <p style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>{dayInsight.summary}</p>
+                          <p style={{ color: '#8b98a5', fontSize: '0.75rem', margin: 0 }}>
+                            Analysis for this contact on this day.
+                            {(dayInsight.prompt_tokens != null || dayInsight.completion_tokens != null) && (
+                              <> · {dayInsight.prompt_tokens ?? 0} in / {dayInsight.completion_tokens ?? 0} out tokens</>
+                            )}
+                            {dayInsight.run_at && <> · {new Date(dayInsight.run_at).toLocaleString('en-US')}</>}
+                          </p>
+                        </>
+                      ) : (
+                        <div>
+                          <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                            Generate an AI analysis of why this contact had activity this day.
+                          </p>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={dayInsightGenerating}
+                            onClick={async () => {
+                              if (!modalPoint) return;
+                              setDayInsightError(null);
+                              setDayInsightGenerating(true);
+                              try {
+                                const { start, end } = periodBounds(modalPoint.period, groupBy);
+                                const params = new URLSearchParams({ start, end });
+                                profileChatIds.forEach((id) => params.append('chatId', String(id)));
+                                const fid = user?.from_id ?? null;
+                                if (fid) params.set('fromId', fid);
+                                const res = await fetch(`/api/stats/day-insight?${params}`, { method: 'POST' });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Failed to generate');
+                                setDayInsight(data.insight ?? null);
+                              } catch (e) {
+                                setDayInsight(null);
+                                setDayInsightError(e instanceof Error ? e.message : 'Failed to generate');
+                              } finally {
+                                setDayInsightGenerating(false);
+                              }
+                            }}
+                          >
+                            {dayInsightGenerating ? 'Generating…' : 'Generate insight'}
+                          </button>
+                        </div>
+                      )}
+                    </section>
+                    {periodReactionsDetail.recentReactions.length > 0 && (
+                      <section>
+                        <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem' }}>Reactions (scroll to see all)</h4>
+                        {periodReactionsDetail.recentReactions.map((r, i) => (
+                          <div key={i} className="recent-msg">
+                            <div className="meta">
+                              {r.reacted_at ? new Date(r.reacted_at).toLocaleString('en-US') : ''} · {r.reactor_name || r.reactor_from_id} reacted {r.emoji ?? '❤️'}
+                            </div>
+                            <div className="text">
+                              {r.message_author_name || r.message_author_id || '—'}: {(r.message_text || '').slice(0, 200)}{(r.message_text && r.message_text.length > 200) ? '…' : ''}
+                            </div>
+                          </div>
+                        ))}
+                      </section>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ color: '#8b98a5' }}>Could not load period reactions.</p>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReactionsGivenList({ fromId, chatIds, initialData }: { fromId: string; chatIds?: number[]; initialData?: { chatId: number; chatName: string | null; chatSlug: string | null; receiverFromId: string; receiverName: string | null; count: number }[] | null }) {
+  const [list, setList] = useState<{ chatId: number; chatName: string | null; chatSlug: string | null; receiverFromId: string; receiverName: string | null; count: number }[]>(initialData ?? []);
+  useEffect(() => {
+    // If data was seeded by /full and chat filter hasn't changed, skip network request
+    if (initialData && (!chatIds || chatIds.length === 0)) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (chatIds?.length) chatIds.forEach((id) => params.append('chatId', String(id)));
+    fetch(`/api/users/${encodeURIComponent(fromId)}/reactions-given?${params}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then(setList)
+      .catch((e) => { if (!(e instanceof DOMException && e.name === 'AbortError')) setList([]); });
+    return () => controller.abort();
+  }, [fromId, chatIds]);
+  if (list.length === 0) return <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>No reactions given.</p>;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Chat</th><th>User</th><th>Reactions given</th><th></th></tr>
+        </thead>
+        <tbody>
+          {list.map((r, i) => (
+            <tr key={`${r.chatId}-${r.receiverFromId}-${i}`}>
+              <td style={{ color: '#8b98a5', fontSize: '0.8125rem' }}>{r.chatName || r.chatSlug || r.chatId}</td>
+              <td>{r.receiverName || r.receiverFromId}</td>
+              <td>{r.count}</td>
+              <td><a href={`/users/${encodeURIComponent(r.receiverFromId)}`}>View profile</a></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function UserMessagesList({ fromId, chatIds, initialMessages }: { fromId: string; chatIds?: number[]; initialMessages?: { date: string; text: string | null; chat_id?: number; chat_name?: string | null; chat_slug?: string | null }[] | null }) {
+  const [data, setData] = useState<{ messages: { date: string; text: string | null; chat_id?: number; chat_name?: string | null; chat_slug?: string | null }[] } | null>(
+    initialMessages ? { messages: initialMessages } : null
+  );
+  useEffect(() => {
+    // If seeded by /full and no extra chat filter, skip fetch
+    if (initialMessages && (!chatIds || chatIds.length === 0)) return;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ limit: '15' });
+    if (chatIds?.length) chatIds.forEach((id) => params.append('chatId', String(id)));
+    fetch(`/api/users/${encodeURIComponent(fromId)}/messages?${params}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .catch((e) => { if (!(e instanceof DOMException && e.name === 'AbortError')) setData(null); });
+    return () => controller.abort();
+  }, [fromId, chatIds]);
+  if (!data) return <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>Loading…</p>;
+  if (data.messages.length === 0) return <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>No messages.</p>;
+  return (
+    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      {data.messages.map((m, i) => (
+        <li key={i} style={{ borderBottom: '1px solid #2f3336', padding: '0.75rem 0' }}>
+          <div style={{ fontSize: '0.8125rem', color: '#8b98a5', marginBottom: '0.25rem' }}>
+            {new Date(m.date).toLocaleString('en-US')}
+            {(m.chat_name ?? m.chat_slug) && (
+              <span style={{ marginLeft: '0.5rem' }}> · {(m.chat_name ?? m.chat_slug) ?? m.chat_id}</span>
+            )}
+          </div>
+          <div style={{ fontSize: '0.875rem' }}>{(m.text || '').slice(0, 300)}{(m.text && m.text.length > 300) ? '…' : ''}</div>
+        </li>
+      ))}
+    </ul>
+  );
+}
