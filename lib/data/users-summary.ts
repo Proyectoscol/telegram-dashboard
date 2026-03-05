@@ -1,5 +1,5 @@
 import { ensureSchema, queryWithRetry } from '@/lib/db/client';
-import { get, set, cacheKey } from '@/lib/cache';
+import { getOrFetch, cacheKey } from '@/lib/cache';
 import { getCacheTtlStatsMinutes } from '@/lib/settings';
 
 /** Returns users-summary rows. Uses cache; falls back to heavy CTE query. */
@@ -13,9 +13,8 @@ export async function getUsersSummaryData(
     start: start ?? '',
     end: end ?? '',
   });
-  const cached = await get<unknown[]>(key);
-  if (cached != null) return cached;
-
+  const cacheTtlMs = (await getCacheTtlStatsMinutes()) * 60 * 1000;
+  return getOrFetch<unknown[]>(key, async () => {
   await ensureSchema();
 
   const params: (string | number | number[])[] = [];
@@ -150,7 +149,6 @@ export async function getUsersSummaryData(
     top_reacted_to_name: r.top_reacted_to_id ? nameMap.get(r.top_reacted_to_id as string) ?? r.top_reacted_to_id : null,
   }));
 
-  const cacheTtlMs = (await getCacheTtlStatsMinutes()) * 60 * 1000;
-  await set(key, rows, cacheTtlMs);
   return rows;
+  }, cacheTtlMs);
 }

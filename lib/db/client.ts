@@ -11,7 +11,7 @@ let _pool: Pool | null = null;
  * Pooler (port 6543) is often blocked by hosting providers on outbound traffic.
  * No env overrides — avoids configuration drift and connection exhaustion.
  */
-const POOL_MAX = 5;
+const POOL_MAX = 10; // doubled from 5: thundering-herd fills 5 connections quickly on Supabase free tier
 // CONNECTION_TIMEOUT_MS must be > QUERY_TIMEOUT_MS so a waiting request outlives a hung query.
 const CONNECTION_TIMEOUT_MS = 40000;
 const IDLE_TIMEOUT_MS = 30000;
@@ -115,10 +115,18 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
 ): Promise<import('pg').QueryResult<T>> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // #region agent log
+    const _qt0 = Date.now();
+    const _qpreview = (typeof text === 'string' ? text : (text as QueryConfig).text ?? '').trim().slice(0, 60).replace(/\s+/g, ' ');
+    // #endregion
     try {
-      return values != null
+      const result = values != null
         ? await pool.query<T>(text as string, values)
         : await pool.query<T>(text as string);
+      // #region agent log
+      log.db(`[DBG-01a8b2 TIMING] query OK in ${Date.now()-_qt0}ms — ${_qpreview}`);
+      // #endregion
+      return result;
     } catch (err) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : '';

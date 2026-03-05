@@ -69,6 +69,41 @@ export async function set(key: string, value: unknown, ttlMs: number = DEFAULT_T
   memorySet(key, value, ttlMs);
 }
 
+// ---------------------------------------------------------------------------
+// Single-flight request coalescing: prevents thundering-herd on simultaneous
+// cache misses. When N callers request the same key at the same time, only
+// ONE DB query runs; the others wait for the shared Promise and get the same
+// result. Process-local (fine for single-container Next.js deployments).
+// ---------------------------------------------------------------------------
+const _inflight = new Map<string, Promise<unknown>>();
+
+/**
+ * Check cache first; if missing, run fetcher() exactly once even when
+ * multiple callers request the same key concurrently (single-flight).
+ */
+export async function getOrFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlMs?: number,
+): Promise<T> {
+  const cached = await get<T>(key);
+  if (cached != null) return cached;
+
+  // Return the in-flight promise if another request is already fetching this key
+  const pending = _inflight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  // First caller: start the fetch and register it so concurrent callers share it
+  const p = (async () => {
+    const result = await fetcher();
+    await set(key, result, ttlMs);
+    return result;
+  })().finally(() => _inflight.delete(key)) as Promise<T>;
+
+  _inflight.set(key, p);
+  return p;
+}
+
 export function cacheKey(prefix: string, params: Record<string, string | null>): string {
   const parts = Object.entries(params)
     .filter(([, v]) => v != null && v !== '')
