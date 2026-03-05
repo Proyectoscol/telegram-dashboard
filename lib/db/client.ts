@@ -171,11 +171,33 @@ let schemaPromise: Promise<void> | null = null;
 let rlsPromise: Promise<void> | null = null;
 
 export async function ensureSchema(): Promise<void> {
+  // #region agent log
+  const alreadyCached = !!schemaPromise;
+  const maskedForLog = (() => { try { const cs = getConnectionString(); return cs.replace(/:([^:@/]+)@/,':***@'); } catch { return 'ERROR_BUILDING'; } })();
+  log.db(`[DBG-01a8b2 H6/H7/H8] ensureSchema called — cached: ${alreadyCached} | url: ${maskedForLog} | pool: total=${(pool as unknown as {totalCount:number}).totalCount ?? '?'}, idle=${(pool as unknown as {idleCount:number}).idleCount ?? '?'}, waiting=${(pool as unknown as {waitingCount:number}).waitingCount ?? '?'}`);
+  fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema',message:'ensureSchema called',data:{alreadyCached,maskedUrl:maskedForLog,total:(pool as any).totalCount,idle:(pool as any).idleCount,waiting:(pool as any).waitingCount},timestamp:Date.now(),hypothesisId:'H8'})}).catch(()=>{});
+  // #endregion
   if (schemaPromise) return schemaPromise;
   schemaPromise = (async () => {
+    // #region agent log
+    log.db('[DBG-01a8b2 H6] ensureSchema: running migration SQL now');
+    fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema-inner',message:'running migration SQL',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
     const schemaPath = join(process.cwd(), 'lib', 'db', 'schema.sql');
     const sql = readFileSync(schemaPath, 'utf-8');
-    await pool.query(sql);
+    try {
+      await pool.query(sql);
+      // #region agent log
+      log.db('[DBG-01a8b2 H6] ensureSchema: migration SQL done');
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema-inner',message:'migration SQL done',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+      // #endregion
+    } catch (schemaErr) {
+      // #region agent log
+      log.db(`[DBG-01a8b2 H6] ensureSchema: migration SQL FAILED — ${schemaErr instanceof Error ? schemaErr.message : String(schemaErr)}`);
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema-inner',message:'migration SQL FAILED',data:{err:schemaErr instanceof Error?schemaErr.message:String(schemaErr)},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+      // #endregion
+      throw schemaErr;
+    }
     if (process.env.SUPABASE_URL) {
       await ensureSupabaseRLS();
     }
