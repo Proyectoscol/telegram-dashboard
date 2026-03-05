@@ -6,7 +6,9 @@ import { log } from '@/lib/logger';
 let _pool: Pool | null = null;
 
 /**
- * Fixed pool sizing for Supabase Pooler: 5 connections, 15s connect timeout.
+ * Fixed pool sizing for Supabase Session Pooler: 5 connections, 15s connect timeout.
+ * Use Session Pooler (port 5432) for persistent Docker containers — Transaction
+ * Pooler (port 6543) is often blocked by hosting providers on outbound traffic.
  * No env overrides — avoids configuration drift and connection exhaustion.
  */
 const POOL_MAX = 5;
@@ -22,7 +24,7 @@ function getConnectionString(): string {
   const url = process.env.DATABASE_URL;
   if (url) return url;
   const host = process.env.POSTGRES_HOST;
-  const port = process.env.POSTGRES_PORT ?? '6543';
+  const port = process.env.POSTGRES_PORT ?? '5432';
   const db = process.env.POSTGRES_DB ?? 'postgres';
   const user = process.env.POSTGRES_USER;
   const password = process.env.POSTGRES_PASSWORD;
@@ -44,7 +46,7 @@ function detectIsSupabasePooler(): boolean {
     return u.includes('pgbouncer=true') || u.includes('pooler.supabase.com');
   }
   const host = process.env.POSTGRES_HOST ?? '';
-  const port = process.env.POSTGRES_PORT ?? '6543';
+  const port = process.env.POSTGRES_PORT ?? '5432';
   return !!host && isPoolerConnection(host, port);
 }
 
