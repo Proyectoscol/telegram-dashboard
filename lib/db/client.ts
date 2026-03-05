@@ -57,6 +57,12 @@ function buildPool(): Pool {
     ? { rejectUnauthorized: false }
     : undefined;
 
+  // #region agent log
+  const maskedUrl = connectionString.replace(/:([^:@/]+)@/, ':***@');
+  log.db(`[DBG-01a8b2 H1] buildPool — url: ${maskedUrl} | pooler: ${isSupabasePooler} | max: ${POOL_MAX} | connectTimeoutMs: ${CONNECTION_TIMEOUT_MS}`);
+  fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:buildPool',message:'buildPool called',data:{maskedUrl,isSupabasePooler,max:POOL_MAX,connectTimeoutMs:CONNECTION_TIMEOUT_MS},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+
   const poolOptions: import('pg').PoolConfig = {
     connectionString,
     max: POOL_MAX,
@@ -119,6 +125,14 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
           msg.includes('Connection terminated') ||
           msg.includes('ECONNRESET') ||
           msg.includes('EPIPE'));
+      // #region agent log
+      if (isAcquireTimeout) {
+        const p = getPool();
+        const poolState = { total: p.totalCount, idle: p.idleCount, waiting: p.waitingCount };
+        log.db(`[DBG-01a8b2 H2/H3] queryWithRetry acquire-timeout — pool state: ${JSON.stringify(poolState)}`);
+        fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'acquire timeout',data:{poolState,msg:msg.slice(0,120)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      }
+      // #endregion
       if (isRetryable && attempt < maxRetries) {
         const delayMs = 400 * (attempt + 1);
         log.db(`queryWithRetry: attempt ${attempt + 1} failed (${msg.slice(0, 80)}), retrying in ${delayMs}ms…`);
