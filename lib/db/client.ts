@@ -12,8 +12,11 @@ let _pool: Pool | null = null;
  * No env overrides — avoids configuration drift and connection exhaustion.
  */
 const POOL_MAX = 5;
-const CONNECTION_TIMEOUT_MS = 15000;
+// Acquire timeout must be > STATEMENT_TIMEOUT_MS so waiting requests get a freed connection.
+const CONNECTION_TIMEOUT_MS = 40000;
 const IDLE_TIMEOUT_MS = 30000;
+// Applied via pool.on('connect') for ALL connections (including Supabase pooler).
+// pool config statement_timeout is ignored by Supabase pooler, so SET via session is required.
 const STATEMENT_TIMEOUT_MS = 25000;
 
 function isPoolerConnection(host: string, port: string): boolean {
@@ -73,14 +76,22 @@ function buildPool(): Pool {
     keepAliveInitialDelayMillis: 10000,
     ...(sslOption && { ssl: sslOption }),
   };
-  if (!isSupabasePooler) {
-    poolOptions.statement_timeout = STATEMENT_TIMEOUT_MS;
-  }
 
   const p = new Pool(poolOptions);
 
   p.on('error', (err) => {
     log.db('Pool idle-client error (pg.Pool will replace the client automatically).', err);
+  });
+
+  // Apply statement_timeout for ALL connections via session SET.
+  // For Supabase pooler (Session mode), the pool config statement_timeout is not honoured,
+  // so we must SET it on the session after each new physical connection is established.
+  // This ensures any query that hangs releases its connection within STATEMENT_TIMEOUT_MS,
+  // preventing pool exhaustion under concurrent load.
+  p.on('connect', (client) => {
+    client.query(`SET statement_timeout = '${STATEMENT_TIMEOUT_MS}'`).catch((err: Error) => {
+      log.db('Failed to set statement_timeout on new connection (non-fatal)', err);
+    });
   });
 
   return p;
