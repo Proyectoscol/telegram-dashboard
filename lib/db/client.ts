@@ -12,12 +12,13 @@ let _pool: Pool | null = null;
  * No env overrides — avoids configuration drift and connection exhaustion.
  */
 const POOL_MAX = 5;
-// Acquire timeout must be > STATEMENT_TIMEOUT_MS so waiting requests get a freed connection.
+// CONNECTION_TIMEOUT_MS must be > QUERY_TIMEOUT_MS so a waiting request outlives a hung query.
 const CONNECTION_TIMEOUT_MS = 40000;
 const IDLE_TIMEOUT_MS = 30000;
-// Applied via pool.on('connect') for ALL connections (including Supabase pooler).
-// pool config statement_timeout is ignored by Supabase pooler, so SET via session is required.
-const STATEMENT_TIMEOUT_MS = 25000;
+// Client-side timeout applied per-query by the pg driver (no race with pool.on('connect')).
+// When this fires, the pg client terminates the TCP connection so the connection is removed
+// from the pool and a new one is created, preventing indefinite pool exhaustion.
+const QUERY_TIMEOUT_MS = 30000;
 
 function isPoolerConnection(host: string, port: string): boolean {
   return host.includes('pooler.supabase.com') || port === '6543';
@@ -71,6 +72,11 @@ function buildPool(): Pool {
     max: POOL_MAX,
     connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
     idleTimeoutMillis: IDLE_TIMEOUT_MS,
+    // Client-side per-query timeout. When it fires, pg terminates the TCP connection so
+    // the hung connection is removed from the pool (pg-pool opens a replacement).
+    // This is the only reliable way to enforce a query limit on Supabase Session Pooler —
+    // pool.on('connect') SET commands race with the first query and are ignored (pg deprecation).
+    query_timeout: QUERY_TIMEOUT_MS,
     allowExitOnIdle: false,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
@@ -81,17 +87,6 @@ function buildPool(): Pool {
 
   p.on('error', (err) => {
     log.db('Pool idle-client error (pg.Pool will replace the client automatically).', err);
-  });
-
-  // Apply statement_timeout for ALL connections via session SET.
-  // For Supabase pooler (Session mode), the pool config statement_timeout is not honoured,
-  // so we must SET it on the session after each new physical connection is established.
-  // This ensures any query that hangs releases its connection within STATEMENT_TIMEOUT_MS,
-  // preventing pool exhaustion under concurrent load.
-  p.on('connect', (client) => {
-    client.query(`SET statement_timeout = '${STATEMENT_TIMEOUT_MS}'`).catch((err: Error) => {
-      log.db('Failed to set statement_timeout on new connection (non-fatal)', err);
-    });
   });
 
   return p;
@@ -130,6 +125,7 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
       const isAcquireTimeout =
         msg.includes('timeout exceeded when trying to connect') ||
         msg.includes('Connection terminated due to connection timeout');
+      const isQueryTimeout = msg.includes('Query read timeout');
       const isRetryable =
         !isAcquireTimeout &&
         (msg.includes('timeout') ||
@@ -142,6 +138,12 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
         const poolState = { total: p.totalCount, idle: p.idleCount, waiting: p.waitingCount };
         log.db(`[DBG-01a8b2 H2/H3] queryWithRetry acquire-timeout — pool state: ${JSON.stringify(poolState)}`);
         fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'acquire timeout',data:{poolState,msg:msg.slice(0,120)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      }
+      if (isQueryTimeout) {
+        const p = getPool();
+        const poolState = { total: p.totalCount, idle: p.idleCount, waiting: p.waitingCount };
+        log.db(`[DBG-01a8b2 POST-FIX] query_timeout fired (30s) — pool state: ${JSON.stringify(poolState)}`);
+        fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'query_timeout fired',data:{poolState,msg:msg.slice(0,120)},timestamp:Date.now(),hypothesisId:'POST-FIX'})}).catch(()=>{});
       }
       // #endregion
       if (isRetryable && attempt < maxRetries) {
