@@ -203,7 +203,12 @@ export function Dashboard() {
       })
       .then((payload) => {
         if (payload.error) throw new Error(payload.error);
-        if (Array.isArray(payload.chats)) setChats(payload.chats);
+        if (Array.isArray(payload.chats)) {
+          setChats(payload.chats);
+          setSelectedChatIds((prev) =>
+            prev.length === 0 && payload.chats.length > 0 ? payload.chats.map((c: { id: number }) => c.id) : prev
+          );
+        }
         if (payload.overview) setData(payload.overview);
         if (Array.isArray(payload.usersSummary)) setUsersSummary(payload.usersSummary);
       })
@@ -511,8 +516,7 @@ export function Dashboard() {
             selectedIds={selectedChatIds}
             onChange={setSelectedChatIds}
             label="Chats"
-            allChatsLabel="All chats"
-            onlyTheseLabel="Show data from:"
+            variant="toggles"
             compact
           />
         )}
@@ -532,18 +536,18 @@ export function Dashboard() {
             Go to contact
           </a>
         ) : null}
-        {(groupBy !== 'day' || quickRange !== 'all' || selectedChatIds.length > 0 || fromId !== '') && (
+        {(groupBy !== 'day' || quickRange !== 'all' || fromId !== '' || selectedChatIds.length !== chats.length || chats.some((c) => !selectedChatIds.includes(c.id))) && (
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => {
               setGroupBy('day');
               setQuickRange('all');
-              setSelectedChatIds([]);
+              setSelectedChatIds(chats.map((c) => c.id));
               setFromId('');
             }}
             style={{ marginLeft: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
-            title="Reset Group by, Range, Chats, and Contact to defaults"
+            title="Reset Group by, Range, Chats (all on), and Contact to defaults"
           >
             Reset filters
           </button>
