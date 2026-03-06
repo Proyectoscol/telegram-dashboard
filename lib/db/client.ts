@@ -128,6 +128,16 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
       const isAcquireTimeout =
         msg.includes('timeout exceeded when trying to connect') ||
         msg.includes('Connection terminated due to connection timeout');
+      if (isAcquireTimeout) {
+        const p = getPool();
+        const textPreview =
+          typeof text === 'string'
+            ? text.replace(/\s+/g, ' ').slice(0, 120)
+            : String(text?.text ?? '').replace(/\s+/g, ' ').slice(0, 120);
+        // #region agent log
+        fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId:'db-acquire-timeout',hypothesisId:'H2',location:'lib/db/client.ts:131',message:'queryWithRetry acquire timeout',data:{poolTotal:p.totalCount,poolIdle:p.idleCount,poolWaiting:p.waitingCount,attempt,textPreview},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
       const isRetryable =
         !isAcquireTimeout &&
         (msg.includes('timeout') ||

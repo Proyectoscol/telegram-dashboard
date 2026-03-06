@@ -18,6 +18,7 @@ const BOOTSTRAP_DASHBOARD_CONCURRENCY = 2;
  */
 export async function GET(request: NextRequest) {
   return withConcurrencyLimit('api:bootstrap/dashboard', BOOTSTRAP_DASHBOARD_CONCURRENCY, async () => {
+    const runId = `bootstrap-dashboard-${Math.random().toString(36).slice(2, 8)}`;
     try {
       const { searchParams } = new URL(request.url);
       const chatIds = parseChatIds(searchParams);
@@ -25,11 +26,26 @@ export async function GET(request: NextRequest) {
       const groupBy = (searchParams.get('groupBy') as 'day' | 'week' | 'month') || 'day';
       const start = searchParams.get('start');
       const end = searchParams.get('end');
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H3',location:'app/api/bootstrap/dashboard/route.ts:28',message:'bootstrap/dashboard start',data:{groupBy,chatIdsCount:chatIds?.length ?? 0,hasFromId:!!fromId,hasStart:!!start,hasEnd:!!end},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const chats = await getChatsData();
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H3',location:'app/api/bootstrap/dashboard/route.ts:31',message:'bootstrap/dashboard chats done',data:{chatRows:Array.isArray(chats)?chats.length:null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const overview = await getOverviewData({ groupBy, chatIds, fromId, start, end });
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H3',location:'app/api/bootstrap/dashboard/route.ts:34',message:'bootstrap/dashboard overview done',data:{hasOverview:!!overview},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const usersSummary = await getUsersSummaryData(chatIds ?? undefined, start, end);
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H4',location:'app/api/bootstrap/dashboard/route.ts:37',message:'bootstrap/dashboard usersSummary done',data:{rows:Array.isArray(usersSummary)?usersSummary.length:null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return NextResponse.json({ chats, overview, usersSummary });
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H2',location:'app/api/bootstrap/dashboard/route.ts:41',message:'bootstrap/dashboard error',data:{error:err instanceof Error ? err.message : 'unknown'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       log.error('bootstrap/dashboard', 'GET bootstrap/dashboard failed', err);
       return NextResponse.json(
         { error: err instanceof Error ? err.message : 'Failed to load dashboard bootstrap' },
