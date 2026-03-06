@@ -171,6 +171,7 @@ export function Dashboard() {
   const [activitySortDir, setActivitySortDir] = useState<'asc' | 'desc'>('desc');
   const [activityPage, setActivityPage] = useState(1);
   const [inactivePage, setInactivePage] = useState(1);
+  const [atRiskPage, setAtRiskPage] = useState(1);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
   const start = range.start;
   const end = range.end;
@@ -274,6 +275,9 @@ export function Dashboard() {
   useEffect(() => {
     setInactivePage(1);
   }, [activitySearch, selectedChatIds, fromId, start, end, usersSummary.length]);
+  useEffect(() => {
+    setAtRiskPage(1);
+  }, [activitySearch, selectedChatIds, fromId, start, end, usersSummary.length]);
 
   if (loading && !data) {
     return <LoadingCard message="Loading dashboard…" />;
@@ -341,6 +345,26 @@ export function Dashboard() {
   const inScopeUsers = usersSummary.filter((u) => !fromId || u.from_id === fromId);
   const activeUsers = inScopeUsers.filter((u) => Number(u.messages_sent) > 0 || Number(u.reactions_given) > 0);
   const inactiveUsers = inScopeUsers.filter((u) => Number(u.messages_sent) === 0 && Number(u.reactions_given) === 0);
+
+  const sevenDaysAgo = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.getTime();
+  })();
+  const atRiskUsers = inScopeUsers.filter((u) => {
+    const hasActivity = Number(u.messages_sent) > 0 || Number(u.reactions_given) > 0;
+    if (!hasActivity) return false;
+    const last = u.last_activity ? new Date(u.last_activity).getTime() : null;
+    return last == null || last < sevenDaysAgo;
+  });
+  const atRiskFiltered = atRiskUsers.filter(matchesActivitySearch);
+  const atRiskSorted = [...atRiskFiltered].sort((a, b) => {
+    const ta = a.last_activity ? new Date(a.last_activity).getTime() : 0;
+    const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
+    return ta - tb;
+  });
+  const atRiskPaged = atRiskSorted.slice((atRiskPage - 1) * PAGE_SIZE, atRiskPage * PAGE_SIZE);
+
   const activityFiltered = activeUsers.filter(matchesActivitySearch);
   const inactiveFiltered = inactiveUsers.filter(matchesActivitySearch);
   const activitySorted = [...activityFiltered].sort((a, b) => {
@@ -939,6 +963,69 @@ export function Dashboard() {
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '0.75rem' }}>
           <a href="/contacts">Full contacts table</a> with CRM and call logging.
         </p>
+      </div>
+
+      <div className="card">
+        <h2>At Risk of going Inactive</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+          Contacts with no messages or reactions in the last 7 days (they had activity before).
+        </p>
+        <div style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+          {activitySearch.length >= 3
+            ? `Showing ${atRiskFiltered.length} of ${atRiskUsers.length} at risk`
+            : `${atRiskUsers.length} contact${atRiskUsers.length === 1 ? '' : 's'} at risk`}
+        </div>
+        {atRiskFiltered.length > 0 ? (
+          <>
+            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Contact</th>
+                    <th>Last activity</th>
+                    <th>Days ago</th>
+                    <th>Messages</th>
+                    <th>Reactions given</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {atRiskPaged.map((u, index) => {
+                    const lastDate = u.last_activity ? new Date(u.last_activity) : null;
+                    const daysAgo = lastDate ? Math.floor((Date.now() - lastDate.getTime()) / 86400000) : null;
+                    return (
+                      <tr key={u.from_id}>
+                        <td style={{ color: '#8b98a5' }}>{(atRiskPage - 1) * PAGE_SIZE + index + 1}</td>
+                        <td>
+                          {u.display_name || u.from_id}
+                          {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
+                        </td>
+                        <td>{lastDate ? lastDate.toLocaleDateString('en-US') : '—'}</td>
+                        <td>{daysAgo != null ? daysAgo : '—'}</td>
+                        <td>{u.messages_sent}</td>
+                        <td>{u.reactions_given}</td>
+                        <td>
+                          <a href={`/users/${encodeURIComponent(u.from_id)}`}>View profile</a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={atRiskPage}
+              totalItems={atRiskSorted.length}
+              onPageChange={setAtRiskPage}
+              itemLabel="at risk"
+            />
+          </>
+        ) : (
+          <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3 ? 'No at-risk contacts match your search.' : 'No contacts at risk for this range (everyone active in the last 7 days or inactive).'}
+          </p>
+        )}
       </div>
 
       <div className="card">
