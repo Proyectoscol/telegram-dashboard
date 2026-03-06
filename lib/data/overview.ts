@@ -344,11 +344,12 @@ SELECT
           ).then((r) =>
             new Map(
               r.rows.map((row) => {
+                const id = Number(row.id);
                 const displayName =
                   (row.name && row.name.trim()) || (row.slug && !/^\d+$/.test(row.slug))
                     ? (row.name?.trim() || row.slug)
-                    : `Chat ${row.id}`;
-                return [row.id, { name: displayName, slug: row.slug }];
+                    : `Chat ${id}`;
+                return [id, { name: displayName, slug: row.slug }];
               })
             )
           )

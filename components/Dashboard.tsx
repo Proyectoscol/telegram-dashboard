@@ -128,7 +128,7 @@ export function Dashboard() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
-  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#ff9500', '#7856ff', '#00d4aa', '#e6007a', '#ffd400', '#0891b2', '#dc2626', '#4ade80'];
+  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#ff9500', '#7856ff', '#00d4aa', '#e6007a', '#ffd400', '#0891b2', '#22c55e', '#a855f7'];
   const chatIdToColor = useMemo(() => {
     const sorted = [...chats].sort((a, b) => a.id - b.id);
     const map = new Map<number, string>();
