@@ -4,6 +4,8 @@ import { join } from 'path';
 import { log } from '@/lib/logger';
 
 let _pool: Pool | null = null;
+let _nextQueryId = 1;
+const _activeQueries = new Map<number, { preview: string; startedAt: number }>();
 
 /**
  * Fixed pool sizing for Supabase Session Pooler: 5 connections, 15s connect timeout.
@@ -100,8 +102,49 @@ function getPool(): Pool {
   return _pool;
 }
 
+function previewQuery(text: string | QueryConfig): string {
+  if (typeof text === 'string') return text.replace(/\s+/g, ' ').slice(0, 140);
+  return String(text?.text ?? '').replace(/\s+/g, ' ').slice(0, 140);
+}
+
+function getActiveQueryPreviews(): string[] {
+  return Array.from(_activeQueries.entries())
+    .map(([id, meta]) => `#${id}:${meta.preview}`)
+    .slice(0, 5);
+}
+
 export const pool = new Proxy({} as Pool, {
   get(_, prop) {
+    if (prop === 'query') {
+      return async (...args: unknown[]) => {
+        const realPool = getPool();
+        const text = args[0] as string | QueryConfig;
+        const preview = previewQuery(text);
+        const queryId = _nextQueryId++;
+        const startedAt = Date.now();
+        _activeQueries.set(queryId, { preview, startedAt });
+        if (_activeQueries.size >= POOL_MAX) {
+          log.db(`[DBG-01a8b2 H8] pool saturation start active=${_activeQueries.size} queryId=${queryId} preview=${preview}`);
+        }
+        try {
+          return args.length > 1
+            ? await realPool.query(args[0] as string, args[1] as unknown[])
+            : await realPool.query(args[0] as string);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('timeout exceeded when trying to connect') || msg.includes('Connection terminated due to connection timeout')) {
+            log.db(`[DBG-01a8b2 H8] pool query acquire-timeout active=${_activeQueries.size} queryId=${queryId} preview=${preview} activeQueries=${JSON.stringify(getActiveQueryPreviews())}`);
+          }
+          throw err;
+        } finally {
+          const elapsedMs = Date.now() - startedAt;
+          _activeQueries.delete(queryId);
+          if (elapsedMs >= 1000 || _activeQueries.size >= POOL_MAX - 1) {
+            log.db(`[DBG-01a8b2 H8] query complete queryId=${queryId} elapsedMs=${elapsedMs} activeAfter=${_activeQueries.size} preview=${preview}`);
+          }
+        }
+      };
+    }
     return (getPool() as unknown as Record<string, unknown>)[prop as string];
   },
 });
@@ -130,14 +173,11 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
         msg.includes('Connection terminated due to connection timeout');
       if (isAcquireTimeout) {
         const p = getPool();
-        const textPreview =
-          typeof text === 'string'
-            ? text.replace(/\s+/g, ' ').slice(0, 120)
-            : String(text?.text ?? '').replace(/\s+/g, ' ').slice(0, 120);
+        const textPreview = previewQuery(text);
         // #region agent log
         fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId:'db-acquire-timeout',hypothesisId:'H2',location:'lib/db/client.ts:131',message:'queryWithRetry acquire timeout',data:{poolTotal:p.totalCount,poolIdle:p.idleCount,poolWaiting:p.waitingCount,attempt,textPreview},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
-        log.db(`[DBG-01a8b2 H2] acquire-timeout pool total=${p.totalCount} idle=${p.idleCount} waiting=${p.waitingCount} attempt=${attempt} query=${textPreview}`);
+        log.db(`[DBG-01a8b2 H2] acquire-timeout pool total=${p.totalCount} idle=${p.idleCount} waiting=${p.waitingCount} attempt=${attempt} query=${textPreview} activeQueries=${JSON.stringify(getActiveQueryPreviews())}`);
       }
       const isRetryable =
         !isAcquireTimeout &&
