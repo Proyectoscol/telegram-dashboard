@@ -1,4 +1,4 @@
-import { ensureSchema, pool } from '@/lib/db/client';
+import { ensureSchema, queryWithRetry } from '@/lib/db/client';
 import { getOrFetch, cacheKey } from '@/lib/cache';
 import { log } from '@/lib/logger';
 
@@ -18,7 +18,7 @@ export async function getChatsData(): Promise<unknown[]> {
     log.db(`[DBG-01a8b2 H4] getChatsData: ensureSchema done in ${Date.now()-t0}ms — querying chats`);
     fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'chats.ts:getChatsData',message:'ensureSchema done',data:{ensureSchemaDurationMs:Date.now()-t0},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
     // #endregion
-    const { rows } = await pool.query(
+    const { rows } = await queryWithRetry(
       'SELECT id, name, type, slug, created_at FROM chats ORDER BY slug'
     );
     return rows;

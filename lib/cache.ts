@@ -96,7 +96,11 @@ export async function getOrFetch<T>(
   // First caller: start the fetch and register it so concurrent callers share it
   const p = (async () => {
     const result = await fetcher();
-    await set(key, result, ttlMs);
+    // Add ±20% jitter so different keys don't all expire at the same clock tick,
+    // which would cause a synchronised cache-miss thundering herd after ~2 minutes.
+    const effective = ttlMs ?? DEFAULT_TTL_MS;
+    const jittered = effective * (0.85 + Math.random() * 0.3);
+    await set(key, result, jittered);
     return result;
   })().finally(() => _inflight.delete(key)) as Promise<T>;
 

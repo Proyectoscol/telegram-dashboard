@@ -11,7 +11,10 @@ let _pool: Pool | null = null;
  * Pooler (port 6543) is often blocked by hosting providers on outbound traffic.
  * No env overrides — avoids configuration drift and connection exhaustion.
  */
-const POOL_MAX = 10; // doubled from 5: thundering-herd fills 5 connections quickly on Supabase free tier
+// Keep pool small: Supabase free tier slows sharply with > 3-5 concurrent queries.
+// With fast queries (86-756ms observed) and pg-pool queuing, 5 connections serve
+// concurrent bursts well within the 40s acquire timeout.
+const POOL_MAX = 5;
 // CONNECTION_TIMEOUT_MS must be > QUERY_TIMEOUT_MS so a waiting request outlives a hung query.
 const CONNECTION_TIMEOUT_MS = 40000;
 const IDLE_TIMEOUT_MS = 30000;
@@ -80,6 +83,11 @@ function buildPool(): Pool {
     allowExitOnIdle: false,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
+    // Recycle connections after 10 minutes to prevent stale accumulation.
+    // Without this, connections established during peak load are never removed
+    // since periodic usage (e.g. settings queries every 2 min) keeps resetting
+    // the 30s idle timer, letting the pool stay at max indefinitely.
+    maxLifetimeSeconds: 600,
     ...(sslOption && { ssl: sslOption }),
   };
 
@@ -124,7 +132,9 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
         ? await pool.query<T>(text as string, values)
         : await pool.query<T>(text as string);
       // #region agent log
-      log.db(`[DBG-01a8b2 TIMING] query OK in ${Date.now()-_qt0}ms — ${_qpreview}`);
+      const _qDur = Date.now()-_qt0;
+      log.db(`[DBG-01a8b2 TIMING] query OK in ${_qDur}ms | pool: total=${getPool().totalCount}, idle=${getPool().idleCount}, waiting=${getPool().waitingCount} — ${_qpreview}`);
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'query OK',data:{durationMs:_qDur,pool:{total:getPool().totalCount,idle:getPool().idleCount,waiting:getPool().waitingCount},preview:_qpreview},timestamp:Date.now(),runId:'post-fix-v2',hypothesisId:'TIMING'})}).catch(()=>{});
       // #endregion
       return result;
     } catch (err) {
