@@ -902,7 +902,7 @@ export function Dashboard() {
             style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
           />
         </div>
-        <div className="table-wrap" style={{ overflowX: 'auto' }}>
+        <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
           <table>
             <thead>
               <tr>
@@ -1004,7 +1004,7 @@ export function Dashboard() {
         </div>
         {hotFiltered.length > 0 ? (
           <>
-            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+            <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -1063,7 +1063,7 @@ export function Dashboard() {
         </div>
         {atRiskFiltered.length > 0 ? (
           <>
-            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+            <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
               <table>
                 <thead>
                   <tr>
@@ -1126,7 +1126,7 @@ export function Dashboard() {
         </div>
         {inactiveFiltered.length > 0 ? (
           <>
-            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+            <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
               <table>
                 <thead>
                   <tr>

@@ -224,6 +224,11 @@ h2 {
   overflow-x: auto;
 }
 
+/* Fixed height for paginated tables: always reserve space for 10 rows */
+.paginated-table-wrap {
+  min-height: 28rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

@@ -1,6 +1,6 @@
 'use client';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 export { PAGE_SIZE };
 
@@ -8,7 +8,7 @@ interface PaginationProps {
   currentPage: number;
   totalItems: number;
   onPageChange: (page: number) => void;
-  /** Optional label e.g. "contacts" for "Showing 1–20 of 45 contacts" */
+  /** Optional label e.g. "contacts" for "Showing 1–10 of 45 contacts" */
   itemLabel?: string;
 }
 
