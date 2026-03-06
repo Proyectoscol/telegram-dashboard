@@ -30,7 +30,7 @@ export default function ContactsPage() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const [contactsSearch, setContactsSearch] = useState('');
-  type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'assigned_to' | 'last_activity' | 'call_count' | 'last_call_at' | 'messages_sent' | 'reactions_received' | 'reactions_given';
+  type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'assigned_to' | 'last_activity' | 'call_count' | 'last_call_at' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'has_persona';
   const [contactsSortBy, setContactsSortBy] = useState<ContactsSortKey>('last_activity');
   const [contactsSortDir, setContactsSortDir] = useState<'asc' | 'desc'>('desc');
   const [contactsPage, setContactsPage] = useState(1);
@@ -87,7 +87,7 @@ export default function ContactsPage() {
     if (key === 'last_activity' || key === 'last_call_at') {
       va = va ? new Date(va as string).getTime() : 0;
       vb = vb ? new Date(vb as string).getTime() : 0;
-    } else if (key === 'is_premium') {
+    } else if (key === 'is_premium' || key === 'has_persona') {
       va = va ? 1 : 0;
       vb = vb ? 1 : 0;
     } else if (key === 'display_name' || key === 'username' || key === 'from_id' || key === 'assigned_to') {
@@ -151,36 +151,6 @@ export default function ContactsPage() {
               ? `Showing ${filteredUsers.length} of ${users.length} contacts`
               : `${users.length} contact${users.length === 1 ? '' : 's'}`}
           </span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem' }}>
-            Sort by
-            <select
-              value={contactsSortBy}
-              onChange={(e) => setContactsSortBy(e.target.value as ContactsSortKey)}
-              style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
-            >
-              <option value="last_activity">Last activity</option>
-              <option value="messages_sent">Messages</option>
-              <option value="reactions_received">Reactions received</option>
-              <option value="reactions_given">Reactions given</option>
-              <option value="display_name">Name</option>
-              <option value="username">Username</option>
-              <option value="from_id">User ID</option>
-              <option value="is_premium">Premium</option>
-              <option value="assigned_to">Assigned to</option>
-              <option value="call_count">Calls</option>
-              <option value="last_call_at">Last call</option>
-            </select>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem' }}>
-            <select
-              value={contactsSortDir}
-              onChange={(e) => setContactsSortDir(e.target.value as 'asc' | 'desc')}
-              style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </label>
           <input
             type="search"
             placeholder="Search by name, username, or user ID (min 3 characters)"
@@ -188,25 +158,62 @@ export default function ContactsPage() {
             onChange={(e) => setContactsSearch(e.target.value)}
             style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
           />
+          {(contactsSortBy !== 'last_activity' || contactsSortDir !== 'desc') && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setContactsSortBy('last_activity'); setContactsSortDir('desc'); setContactsPage(1); }}
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+              title="Reset sort to default (Last activity, descending)"
+            >
+              Reset sort
+            </button>
+          )}
         </div>
         <div className="table-wrap paginated-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Username</th>
-                <th>User ID</th>
-                <th>Premium</th>
-                <th>Messages</th>
-                <th>Reactions rec.</th>
-                <th>Reactions given</th>
-                <th>Assigned to</th>
-                <th>Last activity</th>
-                <th>Calls</th>
-                <th>Last call</th>
-                <th>Persona</th>
-                <th></th>
+                <th className="th-index">#</th>
+                {([
+                  { key: 'display_name' as const, label: 'Name' },
+                  { key: 'username' as const, label: 'Username' },
+                  { key: 'from_id' as const, label: 'User ID' },
+                  { key: 'is_premium' as const, label: 'Premium' },
+                  { key: 'messages_sent' as const, label: 'Messages' },
+                  { key: 'reactions_received' as const, label: 'Reactions rec.' },
+                  { key: 'reactions_given' as const, label: 'Reactions given' },
+                  { key: 'assigned_to' as const, label: 'Assigned to' },
+                  { key: 'last_activity' as const, label: 'Last activity' },
+                  { key: 'call_count' as const, label: 'Calls' },
+                  { key: 'last_call_at' as const, label: 'Last call' },
+                  { key: 'has_persona' as const, label: 'Persona' },
+                ] as { key: ContactsSortKey; label: string }[]).map(({ key, label }) => (
+                  <th key={key} className="sortable-th">
+                    <span className="sortable-th-label">{label}</span>
+                    <span className="sortable-th-arrows">
+                      <button
+                        type="button"
+                        className={`sort-arrow ${contactsSortBy === key && contactsSortDir === 'asc' ? 'sort-arrow-active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setContactsSortBy(key); setContactsSortDir('asc'); setContactsPage(1); }}
+                        aria-label={`Sort by ${label} ascending`}
+                        title="Sort ascending"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
+                      </button>
+                      <button
+                        type="button"
+                        className={`sort-arrow ${contactsSortBy === key && contactsSortDir === 'desc' ? 'sort-arrow-active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setContactsSortBy(key); setContactsSortDir('desc'); setContactsPage(1); }}
+                        aria-label={`Sort by ${label} descending`}
+                        title="Sort descending"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
+                      </button>
+                    </span>
+                  </th>
+                ))}
+                <th className="th-action"></th>
               </tr>
             </thead>
             <tbody>

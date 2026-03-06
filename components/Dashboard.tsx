@@ -174,6 +174,15 @@ export function Dashboard() {
   const [inactivePage, setInactivePage] = useState(1);
   const [atRiskPage, setAtRiskPage] = useState(1);
   const [hotPage, setHotPage] = useState(1);
+  type HotSortKey = 'display_name' | 'longest_streak_days' | 'last_activity' | 'messages_sent' | 'reactions_given';
+  const [hotSortBy, setHotSortBy] = useState<HotSortKey>('longest_streak_days');
+  const [hotSortDir, setHotSortDir] = useState<'asc' | 'desc'>('desc');
+  type AtRiskSortKey = 'display_name' | 'last_activity' | 'messages_sent' | 'reactions_given';
+  const [atRiskSortBy, setAtRiskSortBy] = useState<AtRiskSortKey>('last_activity');
+  const [atRiskSortDir, setAtRiskSortDir] = useState<'asc' | 'desc'>('asc');
+  type InactiveSortKey = 'display_name' | 'is_premium' | 'messages_sent' | 'reactions_given';
+  const [inactiveSortBy, setInactiveSortBy] = useState<InactiveSortKey>('display_name');
+  const [inactiveSortDir, setInactiveSortDir] = useState<'asc' | 'desc'>('asc');
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
   const start = range.start;
   const end = range.end;
@@ -364,9 +373,22 @@ export function Dashboard() {
   });
   const atRiskFiltered = atRiskUsers.filter(matchesActivitySearch);
   const atRiskSorted = [...atRiskFiltered].sort((a, b) => {
-    const ta = a.last_activity ? new Date(a.last_activity).getTime() : 0;
-    const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
-    return ta - tb;
+    const key = atRiskSortBy;
+    if (key === 'display_name') {
+      const va = String(a.display_name ?? a.from_id).trim();
+      const vb = String(b.display_name ?? b.from_id).trim();
+      const n = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+      return atRiskSortDir === 'asc' ? n : -n;
+    }
+    if (key === 'last_activity') {
+      const ta = a.last_activity ? new Date(a.last_activity).getTime() : 0;
+      const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
+      return atRiskSortDir === 'asc' ? ta - tb : tb - ta;
+    }
+    const va = Number((a as Record<string, unknown>)[key]) ?? 0;
+    const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
+    const n = va - vb;
+    return atRiskSortDir === 'asc' ? n : -n;
   });
   const atRiskPaged = atRiskSorted.slice((atRiskPage - 1) * PAGE_SIZE, atRiskPage * PAGE_SIZE);
 
@@ -383,12 +405,22 @@ export function Dashboard() {
   });
   const hotFiltered = hotUsers.filter(matchesActivitySearch);
   const hotSorted = [...hotFiltered].sort((a, b) => {
-    const streakA = Number(a.longest_streak_days) ?? 0;
-    const streakB = Number(b.longest_streak_days) ?? 0;
-    if (streakB !== streakA) return streakB - streakA;
-    const ta = a.last_activity ? new Date(a.last_activity).getTime() : 0;
-    const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
-    return tb - ta;
+    const key = hotSortBy;
+    if (key === 'display_name') {
+      const va = String(a.display_name ?? a.from_id).trim();
+      const vb = String(b.display_name ?? b.from_id).trim();
+      const n = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+      return hotSortDir === 'asc' ? n : -n;
+    }
+    if (key === 'last_activity') {
+      const ta = a.last_activity ? new Date(a.last_activity).getTime() : 0;
+      const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
+      return hotSortDir === 'asc' ? ta - tb : tb - ta;
+    }
+    const va = Number((a as Record<string, unknown>)[key]) ?? 0;
+    const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
+    const n = va - vb;
+    return hotSortDir === 'asc' ? n : -n;
   });
   const hotPaged = hotSorted.slice((hotPage - 1) * PAGE_SIZE, hotPage * PAGE_SIZE);
 
@@ -419,9 +451,25 @@ export function Dashboard() {
   });
   const activityPaged = activitySorted.slice((activityPage - 1) * PAGE_SIZE, activityPage * PAGE_SIZE);
 
-  const inactiveSorted = [...inactiveFiltered].sort((a, b) =>
-    (a.display_name || a.from_id).localeCompare(b.display_name || b.from_id)
-  );
+  const inactiveSorted = [...inactiveFiltered].sort((a, b) => {
+    const key = inactiveSortBy;
+    if (key === 'display_name') {
+      const va = String(a.display_name ?? a.from_id).trim();
+      const vb = String(b.display_name ?? b.from_id).trim();
+      const n = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+      return inactiveSortDir === 'asc' ? n : -n;
+    }
+    if (key === 'is_premium') {
+      const va = (a as Record<string, unknown>).is_premium ? 1 : 0;
+      const vb = (b as Record<string, unknown>).is_premium ? 1 : 0;
+      const n = va - vb;
+      return inactiveSortDir === 'asc' ? n : -n;
+    }
+    const va = Number((a as Record<string, unknown>)[key]) ?? 0;
+    const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
+    const n = va - vb;
+    return inactiveSortDir === 'asc' ? n : -n;
+  });
   const inactivePaged = inactiveSorted.slice((inactivePage - 1) * PAGE_SIZE, inactivePage * PAGE_SIZE);
 
   return (
@@ -1021,10 +1069,24 @@ export function Dashboard() {
         <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
           Contacts who posted 5 or more days in a row, with their most recent post 5 days old or newer.
         </p>
-        <div style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-          {activitySearch.length >= 3
-            ? `Showing ${hotFiltered.length} of ${hotUsers.length} hot`
-            : `${hotUsers.length} hot user${hotUsers.length === 1 ? '' : 's'}`}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+          <span style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3
+              ? `Showing ${hotFiltered.length} of ${hotUsers.length} hot`
+              : `${hotUsers.length} hot user${hotUsers.length === 1 ? '' : 's'}`}
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name, username, or user ID (min 3 characters)"
+            value={activitySearch}
+            onChange={(e) => setActivitySearch(e.target.value)}
+            style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
+          />
+          {(hotSortBy !== 'longest_streak_days' || hotSortDir !== 'desc') && (
+            <button type="button" className="btn btn-secondary" onClick={() => { setHotSortBy('longest_streak_days'); setHotSortDir('desc'); setHotPage(1); }} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Reset sort to default">
+              Reset sort
+            </button>
+          )}
         </div>
         {hotFiltered.length > 0 ? (
           <>
@@ -1032,13 +1094,27 @@ export function Dashboard() {
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Contact</th>
-                    <th>Longest streak (days)</th>
-                    <th>Last activity</th>
-                    <th>Messages</th>
-                    <th>Reactions given</th>
-                    <th></th>
+                    <th className="th-index">#</th>
+                    {([
+                      { key: 'display_name' as const, label: 'Contact' },
+                      { key: 'longest_streak_days' as const, label: 'Longest streak (days)' },
+                      { key: 'last_activity' as const, label: 'Last activity' },
+                      { key: 'messages_sent' as const, label: 'Messages' },
+                      { key: 'reactions_given' as const, label: 'Reactions given' },
+                    ] as { key: HotSortKey; label: string }[]).map(({ key, label }) => (
+                      <th key={key} className="sortable-th">
+                        <span className="sortable-th-label">{label}</span>
+                        <span className="sortable-th-arrows">
+                          <button type="button" className={`sort-arrow ${hotSortBy === key && hotSortDir === 'asc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setHotSortBy(key); setHotSortDir('asc'); setHotPage(1); }} aria-label={`Sort by ${label} ascending`} title="Sort ascending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
+                          </button>
+                          <button type="button" className={`sort-arrow ${hotSortBy === key && hotSortDir === 'desc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setHotSortBy(key); setHotSortDir('desc'); setHotPage(1); }} aria-label={`Sort by ${label} descending`} title="Sort descending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
+                          </button>
+                        </span>
+                      </th>
+                    ))}
+                    <th className="th-action"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1080,10 +1156,24 @@ export function Dashboard() {
         <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
           Contacts with no messages or reactions in the last 7 days (they had activity before).
         </p>
-        <div style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-          {activitySearch.length >= 3
-            ? `Showing ${atRiskFiltered.length} of ${atRiskUsers.length} at risk`
-            : `${atRiskUsers.length} contact${atRiskUsers.length === 1 ? '' : 's'} at risk`}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+          <span style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3
+              ? `Showing ${atRiskFiltered.length} of ${atRiskUsers.length} at risk`
+              : `${atRiskUsers.length} contact${atRiskUsers.length === 1 ? '' : 's'} at risk`}
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name, username, or user ID (min 3 characters)"
+            value={activitySearch}
+            onChange={(e) => setActivitySearch(e.target.value)}
+            style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
+          />
+          {(atRiskSortBy !== 'last_activity' || atRiskSortDir !== 'asc') && (
+            <button type="button" className="btn btn-secondary" onClick={() => { setAtRiskSortBy('last_activity'); setAtRiskSortDir('asc'); setAtRiskPage(1); }} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Reset sort to default">
+              Reset sort
+            </button>
+          )}
         </div>
         {atRiskFiltered.length > 0 ? (
           <>
@@ -1091,13 +1181,41 @@ export function Dashboard() {
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Contact</th>
-                    <th>Last activity</th>
+                    <th className="th-index">#</th>
+                    {[
+                      { key: 'display_name' as const, label: 'Contact' },
+                      { key: 'last_activity' as const, label: 'Last activity' },
+                    ].map(({ key, label }) => (
+                      <th key={key} className="sortable-th">
+                        <span className="sortable-th-label">{label}</span>
+                        <span className="sortable-th-arrows">
+                          <button type="button" className={`sort-arrow ${atRiskSortBy === key && atRiskSortDir === 'asc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setAtRiskSortBy(key); setAtRiskSortDir('asc'); setAtRiskPage(1); }} aria-label={`Sort by ${label} ascending`} title="Sort ascending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
+                          </button>
+                          <button type="button" className={`sort-arrow ${atRiskSortBy === key && atRiskSortDir === 'desc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setAtRiskSortBy(key); setAtRiskSortDir('desc'); setAtRiskPage(1); }} aria-label={`Sort by ${label} descending`} title="Sort descending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
+                          </button>
+                        </span>
+                      </th>
+                    ))}
                     <th>Days ago</th>
-                    <th>Messages</th>
-                    <th>Reactions given</th>
-                    <th></th>
+                    {[
+                      { key: 'messages_sent' as const, label: 'Messages' },
+                      { key: 'reactions_given' as const, label: 'Reactions given' },
+                    ].map(({ key, label }) => (
+                      <th key={key} className="sortable-th">
+                        <span className="sortable-th-label">{label}</span>
+                        <span className="sortable-th-arrows">
+                          <button type="button" className={`sort-arrow ${atRiskSortBy === key && atRiskSortDir === 'asc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setAtRiskSortBy(key); setAtRiskSortDir('asc'); setAtRiskPage(1); }} aria-label={`Sort by ${label} ascending`} title="Sort ascending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
+                          </button>
+                          <button type="button" className={`sort-arrow ${atRiskSortBy === key && atRiskSortDir === 'desc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setAtRiskSortBy(key); setAtRiskSortDir('desc'); setAtRiskPage(1); }} aria-label={`Sort by ${label} descending`} title="Sort descending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
+                          </button>
+                        </span>
+                      </th>
+                    ))}
+                    <th className="th-action"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1143,10 +1261,24 @@ export function Dashboard() {
         <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
           Contacts with 0 messages and 0 reactions given in the selected range.
         </p>
-        <div style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-          {activitySearch.length >= 3
-            ? `Showing ${inactiveFiltered.length} of ${inactiveUsers.length} inactive users`
-            : `${inactiveUsers.length} inactive user${inactiveUsers.length === 1 ? '' : 's'}`}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+          <span style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3
+              ? `Showing ${inactiveFiltered.length} of ${inactiveUsers.length} inactive users`
+              : `${inactiveUsers.length} inactive user${inactiveUsers.length === 1 ? '' : 's'}`}
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name, username, or user ID (min 3 characters)"
+            value={activitySearch}
+            onChange={(e) => setActivitySearch(e.target.value)}
+            style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
+          />
+          {(inactiveSortBy !== 'display_name' || inactiveSortDir !== 'asc') && (
+            <button type="button" className="btn btn-secondary" onClick={() => { setInactiveSortBy('display_name'); setInactiveSortDir('asc'); setInactivePage(1); }} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Reset sort to default">
+              Reset sort
+            </button>
+          )}
         </div>
         {inactiveFiltered.length > 0 ? (
           <>
@@ -1154,12 +1286,26 @@ export function Dashboard() {
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Contact</th>
-                    <th>Premium</th>
-                    <th>Messages</th>
-                    <th>Reactions given</th>
-                    <th></th>
+                    <th className="th-index">#</th>
+                    {([
+                      { key: 'display_name' as const, label: 'Contact' },
+                      { key: 'is_premium' as const, label: 'Premium' },
+                      { key: 'messages_sent' as const, label: 'Messages' },
+                      { key: 'reactions_given' as const, label: 'Reactions given' },
+                    ] as { key: InactiveSortKey; label: string }[]).map(({ key, label }) => (
+                      <th key={key} className="sortable-th">
+                        <span className="sortable-th-label">{label}</span>
+                        <span className="sortable-th-arrows">
+                          <button type="button" className={`sort-arrow ${inactiveSortBy === key && inactiveSortDir === 'asc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setInactiveSortBy(key); setInactiveSortDir('asc'); setInactivePage(1); }} aria-label={`Sort by ${label} ascending`} title="Sort ascending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
+                          </button>
+                          <button type="button" className={`sort-arrow ${inactiveSortBy === key && inactiveSortDir === 'desc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setInactiveSortBy(key); setInactiveSortDir('desc'); setInactivePage(1); }} aria-label={`Sort by ${label} descending`} title="Sort descending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
+                          </button>
+                        </span>
+                      </th>
+                    ))}
+                    <th className="th-action"></th>
                   </tr>
                 </thead>
                 <tbody>
