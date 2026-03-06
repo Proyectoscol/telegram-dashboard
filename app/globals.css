@@ -246,6 +246,39 @@ th {
   font-weight: 500;
 }
 
+.sortable-th {
+  white-space: nowrap;
+  min-width: 5rem;
+}
+.sortable-th .sortable-th-label {
+  margin-right: 0.25rem;
+}
+.sortable-th .sortable-th-arrows {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  vertical-align: middle;
+}
+.sortable-th .sort-arrow {
+  background: none;
+  border: none;
+  color: #6e767d;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  font-size: 0.7rem;
+  line-height: 0.9;
+}
+.sortable-th .sort-arrow:hover {
+  color: #e7e9ea;
+}
+.sortable-th .sort-arrow-active {
+  color: #1d9bf0;
+  font-weight: 700;
+}
+.th-index { width: 2.5rem; }
+.th-action { width: 6rem; }
+
 td a {
   color: #1d9bf0;
   text-decoration: none;

@@ -167,7 +167,7 @@ export function Dashboard() {
   const [dayInsightGenerating, setDayInsightGenerating] = useState(false);
   const [dayInsightError, setDayInsightError] = useState<string | null>(null);
   const [activitySearch, setActivitySearch] = useState('');
-  type ActivitySortKey = 'is_premium' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'photos' | 'videos' | 'files' | 'audios' | 'messages_edited' | 'replies' | 'total_words' | 'total_chars' | 'first_activity' | 'last_activity' | 'active_days' | 'reactions_ratio';
+  type ActivitySortKey = 'display_name' | 'is_premium' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'photos' | 'videos' | 'files' | 'audios' | 'messages_edited' | 'replies' | 'total_words' | 'total_chars' | 'first_activity' | 'last_activity' | 'active_days' | 'reactions_ratio' | 'top_reacted_to_name';
   const [activitySortBy, setActivitySortBy] = useState<ActivitySortKey>('messages_sent');
   const [activitySortDir, setActivitySortDir] = useState<'asc' | 'desc'>('desc');
   const [activityPage, setActivityPage] = useState(1);
@@ -396,6 +396,12 @@ export function Dashboard() {
   const inactiveFiltered = inactiveUsers.filter(matchesActivitySearch);
   const activitySorted = [...activityFiltered].sort((a, b) => {
     const key = activitySortBy;
+    if (key === 'display_name' || key === 'top_reacted_to_name') {
+      const va = String((a as Record<string, unknown>)[key] ?? (key === 'display_name' ? a.from_id : '')).trim();
+      const vb = String((b as Record<string, unknown>)[key] ?? (key === 'display_name' ? b.from_id : '')).trim();
+      const n = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+      return activitySortDir === 'asc' ? n : -n;
+    }
     let va: unknown = (a as Record<string, unknown>)[key];
     let vb: unknown = (b as Record<string, unknown>)[key];
     if (key === 'is_premium') {
@@ -859,41 +865,6 @@ export function Dashboard() {
               ? `Showing ${activityFiltered.length} of ${activeUsers.length} active contacts`
               : `${activeUsers.length} active contact${activeUsers.length === 1 ? '' : 's'}`}
           </span>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem' }}>
-            Sort by
-            <select
-              value={activitySortBy}
-              onChange={(e) => setActivitySortBy(e.target.value as ActivitySortKey)}
-              style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
-            >
-              <option value="messages_sent">Messages</option>
-              <option value="reactions_received">Reactions received</option>
-              <option value="reactions_given">Reactions given</option>
-              <option value="is_premium">Premium</option>
-              <option value="photos">Photos</option>
-              <option value="videos">Videos</option>
-              <option value="files">Files</option>
-              <option value="audios">Audios</option>
-              <option value="messages_edited">Edited</option>
-              <option value="replies">Replies</option>
-              <option value="total_words">Words</option>
-              <option value="total_chars">Chars</option>
-              <option value="first_activity">First activity</option>
-              <option value="last_activity">Last activity</option>
-              <option value="active_days">Active days</option>
-              <option value="reactions_ratio">React./msg</option>
-            </select>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.875rem' }}>
-            <select
-              value={activitySortDir}
-              onChange={(e) => setActivitySortDir(e.target.value as 'asc' | 'desc')}
-              style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </label>
           <input
             type="search"
             placeholder="Search by name, username, or user ID (min 3 characters)"
@@ -906,26 +877,52 @@ export function Dashboard() {
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Contact</th>
-                <th>Premium</th>
-                <th>Messages</th>
-                <th>Reactions rec.</th>
-                <th>Reactions given</th>
-                <th>Photos</th>
-                <th>Videos</th>
-                <th>Files</th>
-                <th>Audios</th>
-                <th>Edited</th>
-                <th>Replies</th>
-                <th>Words</th>
-                <th>Chars</th>
-                <th>First activity</th>
-                <th>Last activity</th>
-                <th>Active days</th>
-                <th>React./msg</th>
-                <th>Top reacted to</th>
-                <th></th>
+                <th className="th-index">#</th>
+                {([
+                  { key: 'display_name' as const, label: 'Contact' },
+                  { key: 'is_premium' as const, label: 'Premium' },
+                  { key: 'messages_sent' as const, label: 'Messages' },
+                  { key: 'reactions_received' as const, label: 'Reactions rec.' },
+                  { key: 'reactions_given' as const, label: 'Reactions given' },
+                  { key: 'photos' as const, label: 'Photos' },
+                  { key: 'videos' as const, label: 'Videos' },
+                  { key: 'files' as const, label: 'Files' },
+                  { key: 'audios' as const, label: 'Audios' },
+                  { key: 'messages_edited' as const, label: 'Edited' },
+                  { key: 'replies' as const, label: 'Replies' },
+                  { key: 'total_words' as const, label: 'Words' },
+                  { key: 'total_chars' as const, label: 'Chars' },
+                  { key: 'first_activity' as const, label: 'First activity' },
+                  { key: 'last_activity' as const, label: 'Last activity' },
+                  { key: 'active_days' as const, label: 'Active days' },
+                  { key: 'reactions_ratio' as const, label: 'React./msg' },
+                  { key: 'top_reacted_to_name' as const, label: 'Top reacted to' },
+                ] as { key: ActivitySortKey; label: string }[]).map(({ key, label }) => (
+                  <th key={key} className="sortable-th">
+                    <span className="sortable-th-label">{label}</span>
+                    <span className="sortable-th-arrows">
+                      <button
+                        type="button"
+                        className={`sort-arrow ${activitySortBy === key && activitySortDir === 'asc' ? 'sort-arrow-active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setActivitySortBy(key); setActivitySortDir('asc'); setActivityPage(1); }}
+                        aria-label={`Sort by ${label} ascending`}
+                        title="Sort ascending"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className={`sort-arrow ${activitySortBy === key && activitySortDir === 'desc' ? 'sort-arrow-active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setActivitySortBy(key); setActivitySortDir('desc'); setActivityPage(1); }}
+                        aria-label={`Sort by ${label} descending`}
+                        title="Sort descending"
+                      >
+                        ↓
+                      </button>
+                    </span>
+                  </th>
+                ))}
+                <th className="th-action"></th>
               </tr>
             </thead>
             <tbody>
