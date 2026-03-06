@@ -128,7 +128,7 @@ export function Dashboard() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
-  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#f91854', '#ffd400', '#7856ff', '#00d4aa', '#7c3aed', '#ea580c', '#0891b2', '#4f46e5'];
+  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#f91854', '#ffd400', '#7c3aed', '#ea580c'];
   const chatIdToColor = useMemo(() => {
     const sorted = [...chats].sort((a, b) => a.id - b.id);
     const map = new Map<number, string>();
@@ -163,7 +163,7 @@ export function Dashboard() {
       top_reacted_to_name: string | null;
     }[]
   >([]);
-  const [modalPoint, setModalPoint] = useState<{ period: string; periodLabel: string; count: number; type: 'messages' | 'reactions' } | null>(null);
+  const [modalPoint, setModalPoint] = useState<{ period: string; periodLabel: string; count: number; type: 'messages' | 'reactions'; chatId?: number; chatName?: string } | null>(null);
   const [periodDetail, setPeriodDetail] = useState<PeriodDetail | null>(null);
   const [periodReactionsDetail, setPeriodReactionsDetail] = useState<PeriodReactionsDetail | null>(null);
   const [periodDetailLoading, setPeriodDetailLoading] = useState(false);
@@ -232,7 +232,8 @@ export function Dashboard() {
     const { start, end } = periodBounds(modalPoint.period, groupBy);
     setPeriodDetailLoading(true);
     const params = new URLSearchParams({ start, end });
-    selectedChatIds.forEach((id) => params.append('chatId', String(id)));
+    const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : selectedChatIds;
+    chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
     if (fromId) params.set('fromId', fromId);
     fetch(`/api/stats/period-detail?${params}`, { signal: ctrl.signal })
       .then((r) => r.json())
@@ -251,7 +252,8 @@ export function Dashboard() {
     const { start, end } = periodBounds(modalPoint.period, groupBy);
     setPeriodReactionsLoading(true);
     const params = new URLSearchParams({ start, end });
-    selectedChatIds.forEach((id) => params.append('chatId', String(id)));
+    const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : selectedChatIds;
+    chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
     if (fromId) params.set('fromId', fromId);
     fetch(`/api/stats/period-reactions?${params}`, { signal: ctrl.signal })
       .then((r) => r.json())
@@ -272,7 +274,8 @@ export function Dashboard() {
     const { start, end } = periodBounds(modalPoint.period, groupBy);
     setDayInsightLoading(true);
     const params = new URLSearchParams({ start, end });
-    selectedChatIds.forEach((id) => params.append('chatId', String(id)));
+    const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : selectedChatIds;
+    chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
     if (fromId) params.set('fromId', fromId);
     fetch(`/api/stats/day-insight?${params}`, { signal: ctrl.signal })
       .then(async (r) => {
@@ -616,6 +619,8 @@ export function Dashboard() {
                           periodLabel: (p.periodLabel as string) ?? formatPeriod(p.period as string),
                           count: Number(p.count) ?? 0,
                           type: 'messages',
+                          chatId: c.chatId,
+                          chatName: c.chatName,
                         });
                       } }}
                     />
@@ -648,13 +653,23 @@ export function Dashboard() {
             </div>
           )}
         </div>
+        {byChatMessages.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #2f3336', fontSize: '0.8125rem', color: '#8b98a5' }}>
+            {byChatMessages.map((c) => (
+              <span key={c.chatId} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ width: 12, height: 12, borderRadius: 2, background: chatIdToColor(c.chatId), flexShrink: 0 }} aria-hidden />
+                <span style={{ color: '#e7e9ea' }}>{c.chatName}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {modalPoint && (
         <div className="modal-backdrop" onClick={() => setModalPoint(null)} role="presentation">
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{modalPoint.type === 'reactions' ? 'Reactions' : 'Messages'}: {modalPoint.periodLabel}</h3>
+              <h3>{modalPoint.type === 'reactions' ? 'Reactions' : 'Messages'}: {modalPoint.periodLabel}{modalPoint.chatName ? ` — ${modalPoint.chatName}` : ''}</h3>
               <button type="button" className="modal-close" onClick={() => setModalPoint(null)} aria-label="Close">
                 ×
               </button>
@@ -710,7 +725,8 @@ export function Dashboard() {
                               try {
                                 const { start, end } = periodBounds(modalPoint.period, groupBy);
                                 const params = new URLSearchParams({ start, end });
-                                selectedChatIds.forEach((id) => params.append('chatId', String(id)));
+                                const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : selectedChatIds;
+                                chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
                                 if (fromId) params.set('fromId', fromId);
                                 const res = await fetch(`/api/stats/day-insight?${params}`, { method: 'POST' });
                                 const data = await res.json();
@@ -817,7 +833,8 @@ export function Dashboard() {
                               try {
                                 const { start, end } = periodBounds(modalPoint.period, groupBy);
                                 const params = new URLSearchParams({ start, end });
-                                selectedChatIds.forEach((id) => params.append('chatId', String(id)));
+                                const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : selectedChatIds;
+                                chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
                                 if (fromId) params.set('fromId', fromId);
                                 const res = await fetch(`/api/stats/day-insight?${params}`, { method: 'POST' });
                                 const data = await res.json();
@@ -896,6 +913,8 @@ export function Dashboard() {
                           periodLabel: (p.periodLabel as string) ?? formatPeriod(p.period as string),
                           count: Number(p.count) ?? 0,
                           type: 'reactions',
+                          chatId: c.chatId,
+                          chatName: c.chatName,
                         });
                       } }}
                     />
@@ -926,6 +945,16 @@ export function Dashboard() {
             </div>
           )}
         </div>
+        {byChatReactions.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #2f3336', fontSize: '0.8125rem', color: '#8b98a5' }}>
+            {byChatReactions.map((c) => (
+              <span key={c.chatId} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ width: 12, height: 3, borderRadius: 1, background: chatIdToColor(c.chatId), flexShrink: 0 }} aria-hidden />
+                <span style={{ color: '#e7e9ea' }}>{c.chatName}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">
