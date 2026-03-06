@@ -106,8 +106,37 @@ function getPool(): Pool {
   return _pool;
 }
 
+// Track whether the current .query() call is coming from queryWithRetry
+// (which has its own TIMING log). If so, skip the DIRECT log to avoid noise.
+let _inQueryWithRetry = false;
+
 export const pool = new Proxy({} as Pool, {
   get(_, prop) {
+    if (prop === 'query') {
+      const actualPool = getPool();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return function poolQueryProxy(...args: any[]) {
+        if (_inQueryWithRetry) {
+          // Already logged by queryWithRetry's TIMING log — no double-logging
+          return (actualPool as unknown as Record<string, (...a: unknown[]) => unknown>).query(...args);
+        }
+        // #region agent log
+        const t0 = Date.now();
+        const preview = (typeof args[0] === 'string' ? args[0] : ((args[0] as QueryConfig)?.text ?? '')).trim().slice(0, 70).replace(/\s+/g, ' ');
+        const p2 = actualPool as unknown as { totalCount: number; idleCount: number; waitingCount: number };
+        const result = (actualPool as unknown as Record<string, (...a: unknown[]) => unknown>).query(...args) as Promise<import('pg').QueryResult>;
+        result.then(() => {
+          const dur = Date.now() - t0;
+          const state = `total=${p2.totalCount}, idle=${p2.idleCount}, waiting=${p2.waitingCount}`;
+          log.db(`[DBG-01a8b2 DIRECT] direct pool.query OK in ${dur}ms | pool: ${state} — ${preview}`);
+          fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:pool.query.proxy',message:'direct pool.query OK',data:{durationMs:dur,pool:{total:p2.totalCount,idle:p2.idleCount,waiting:p2.waitingCount},preview},timestamp:Date.now(),runId:'post-fix-v3',hypothesisId:'DIRECT'})}).catch(()=>{});
+        }).catch((err: Error) => {
+          log.db(`[DBG-01a8b2 DIRECT] direct pool.query FAIL in ${Date.now()-t0}ms — ${preview}: ${err.message?.slice(0,80)}`);
+        });
+        return result;
+        // #endregion
+      };
+    }
     return (getPool() as unknown as Record<string, unknown>)[prop as string];
   },
 });
@@ -128,9 +157,15 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
     const _qpreview = (typeof text === 'string' ? text : (text as QueryConfig).text ?? '').trim().slice(0, 60).replace(/\s+/g, ' ');
     // #endregion
     try {
-      const result = values != null
-        ? await pool.query<T>(text as string, values)
-        : await pool.query<T>(text as string);
+      _inQueryWithRetry = true;
+      let result: import('pg').QueryResult<T>;
+      try {
+        result = values != null
+          ? await pool.query<T>(text as string, values)
+          : await pool.query<T>(text as string);
+      } finally {
+        _inQueryWithRetry = false;
+      }
       // #region agent log
       const _qDur = Date.now()-_qt0;
       log.db(`[DBG-01a8b2 TIMING] query OK in ${_qDur}ms | pool: total=${getPool().totalCount}, idle=${getPool().idleCount}, waiting=${getPool().waitingCount} — ${_qpreview}`);

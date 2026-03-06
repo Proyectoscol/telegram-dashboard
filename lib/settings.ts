@@ -169,6 +169,9 @@ export async function getPersonaSchemaDescriptions(): Promise<Record<string, str
 
 /** List limits for UI (AI usage rows, messages per page, period detail top N). */
 export async function getListLimits(): Promise<{ aiUsage: number; messagesPage: number; periodDetail: number }> {
+  if (_listLimitsCache && Date.now() < _listLimitsCache.expiresAt) {
+    return _listLimitsCache.value;
+  }
   const { rows } = await pool.query<{ key: string; value: string }>(
     "SELECT key, value FROM settings WHERE key = ANY($1::text[])",
     [[SETTING_UI_LIST_LIMIT_AI_USAGE, SETTING_UI_LIST_LIMIT_MESSAGES_PAGE, SETTING_UI_LIST_LIMIT_PERIOD_DETAIL]]
@@ -177,22 +180,33 @@ export async function getListLimits(): Promise<{ aiUsage: number; messagesPage: 
   const aiUsage = Math.max(10, Math.min(500, parseInt(map.get(SETTING_UI_LIST_LIMIT_AI_USAGE) ?? '50', 10) || 50));
   const messagesPage = Math.max(5, Math.min(200, parseInt(map.get(SETTING_UI_LIST_LIMIT_MESSAGES_PAGE) ?? '20', 10) || 20));
   const periodDetail = Math.max(5, Math.min(100, parseInt(map.get(SETTING_UI_LIST_LIMIT_PERIOD_DETAIL) ?? '20', 10) || 20));
-  return { aiUsage, messagesPage, periodDetail };
+  const value = { aiUsage, messagesPage, periodDetail };
+  _listLimitsCache = { value, expiresAt: Date.now() + 60_000 };
+  return value;
 }
 
 /** Persona card labels for UserProfile (title, summary, etc.). */
 export async function getPersonaLabels(): Promise<Record<string, string>> {
+  if (_personaLabelsCache && Date.now() < _personaLabelsCache.expiresAt) {
+    return _personaLabelsCache.value;
+  }
   const { rows } = await pool.query<{ value: string }>(
     'SELECT value FROM settings WHERE key = $1',
     [SETTING_UI_PERSONA_LABELS]
   );
-  if (rows.length === 0) return { ...DEFAULT_UI_PERSONA_LABELS };
-  try {
-    const parsed = JSON.parse(rows[0].value) as Record<string, string>;
-    return { ...DEFAULT_UI_PERSONA_LABELS, ...parsed };
-  } catch {
-    return { ...DEFAULT_UI_PERSONA_LABELS };
+  let result: Record<string, string>;
+  if (rows.length === 0) {
+    result = { ...DEFAULT_UI_PERSONA_LABELS };
+  } else {
+    try {
+      const parsed = JSON.parse(rows[0].value) as Record<string, string>;
+      result = { ...DEFAULT_UI_PERSONA_LABELS, ...parsed };
+    } catch {
+      result = { ...DEFAULT_UI_PERSONA_LABELS };
+    }
   }
+  _personaLabelsCache = { value: result, expiresAt: Date.now() + 60_000 };
+  return result;
 }
 
 // Process-level caches so that hot-path callers (overview, users-summary, users-list)
@@ -201,6 +215,8 @@ export async function getPersonaLabels(): Promise<Record<string, string>> {
 let _cacheTtlCache: { value: number; expiresAt: number } | null = null;
 let _personaPromptsCache: { value: { systemPrompt: string; userPromptTemplate: string }; expiresAt: number } | null = null;
 let _dayInsightPromptsCache: { value: { systemPrompt: string; userPromptTemplate: string }; expiresAt: number } | null = null;
+let _listLimitsCache: { value: { aiUsage: number; messagesPage: number; periodDetail: number }; expiresAt: number } | null = null;
+let _personaLabelsCache: { value: Record<string, string>; expiresAt: number } | null = null;
 
 /** Stats cache TTL in minutes (1–60). Result is cached in-process for 60 s. */
 export async function getCacheTtlStatsMinutes(): Promise<number> {

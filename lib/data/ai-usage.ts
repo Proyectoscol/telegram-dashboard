@@ -1,16 +1,19 @@
 import { ensureSchema, pool } from '@/lib/db/client';
 import { getListLimits } from '@/lib/settings';
 import { computeCost, formatModelPricing } from '@/lib/ai/model-pricing';
+import { getOrFetch } from '@/lib/cache';
 
-/** Returns ai_usage payload: logs, total, summary. */
+/** Returns ai_usage payload: logs, total, summary. Cached for 60 s to avoid hammering the pool. */
 export async function getAiUsageData(limit?: number): Promise<{
   logs: unknown[];
   total: number;
   summary: { total_runs: number; total_prompt_tokens: number; total_completion_tokens: number; total_tokens: number; total_cost_usd: number };
 }> {
-  await ensureSchema();
   const defaultLimit = (await getListLimits()).aiUsage;
   const resolvedLimit = limit != null ? Math.min(500, Math.max(1, limit)) : defaultLimit;
+
+  return getOrFetch(`ai-usage:${resolvedLimit}`, async () => {
+  await ensureSchema();
   const { rows } = await pool.query(
     `SELECT id, entity_type, entity_id, model, prompt_tokens, completion_tokens, total_tokens, cost_estimate, created_at
      FROM ai_usage_logs
@@ -55,4 +58,5 @@ export async function getAiUsageData(limit?: number): Promise<{
       total_cost_usd: totalCostUsd,
     },
   };
+  }, 60_000);
 }
