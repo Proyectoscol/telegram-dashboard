@@ -128,7 +128,7 @@ export function Dashboard() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
-  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#f91854', '#ffd400', '#7c3aed', '#ea580c'];
+  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#ff9500', '#7856ff', '#00d4aa', '#e6007a', '#ffd400', '#0891b2', '#dc2626', '#4ade80'];
   const chatIdToColor = useMemo(() => {
     const sorted = [...chats].sort((a, b) => a.id - b.id);
     const map = new Map<number, string>();
@@ -611,8 +611,8 @@ export function Dashboard() {
                       stroke={chatIdToColor(c.chatId)}
                       fill={chatIdToColor(c.chatId)}
                       fillOpacity={0.3}
-                      dot={{ r: 4, cursor: 'pointer' }}
-                      activeDot={{ r: 6, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
+                      dot={{ r: 5, cursor: 'pointer' }}
+                      activeDot={{ r: 12, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
                         const p = (payload as { payload?: Record<string, unknown> })?.payload ?? (payload as Record<string, unknown>);
                         if (p?.period != null) setModalPoint({
                           period: p.period as string,
@@ -632,8 +632,8 @@ export function Dashboard() {
                     stroke="#1d9bf0"
                     fill="#1d9bf0"
                     fillOpacity={0.3}
-                    dot={{ r: 4, cursor: 'pointer' }}
-                    activeDot={{ r: 6, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
+                    dot={{ r: 5, cursor: 'pointer' }}
+                    activeDot={{ r: 12, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
                       const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload
                         ?? (payload as { period?: string; periodLabel?: string; count?: number });
                       if (p?.period != null) setModalPoint({
@@ -675,6 +675,11 @@ export function Dashboard() {
               </button>
             </div>
             <div className="modal-body">
+              {modalPoint.chatName && (
+                <p style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: '#8b98a5' }}>
+                  Chat: <strong style={{ color: '#e7e9ea' }}>{modalPoint.chatName}</strong>
+                </p>
+              )}
               {modalPoint.type === 'messages' ? (
                 periodDetailLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
@@ -905,8 +910,8 @@ export function Dashboard() {
                       name={c.chatName}
                       stroke={chatIdToColor(c.chatId)}
                       strokeWidth={2}
-                      dot={{ fill: chatIdToColor(c.chatId), r: 4, cursor: 'pointer' }}
-                      activeDot={{ r: 6, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
+                      dot={{ fill: chatIdToColor(c.chatId), r: 5, cursor: 'pointer' }}
+                      activeDot={{ r: 12, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
                         const p = (payload as { payload?: Record<string, unknown> })?.payload ?? (payload as Record<string, unknown>);
                         if (p?.period != null) setModalPoint({
                           period: p.period as string,
@@ -925,8 +930,8 @@ export function Dashboard() {
                     dataKey="count"
                     stroke="#00ba7c"
                     strokeWidth={2}
-                    dot={{ fill: '#00ba7c', r: 4, cursor: 'pointer' }}
-                    activeDot={{ r: 6, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
+                    dot={{ fill: '#00ba7c', r: 5, cursor: 'pointer' }}
+                    activeDot={{ r: 12, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
                       const p = (payload as { payload?: Record<string, unknown> })?.payload ?? (payload as Record<string, unknown>);
                       if (p?.period != null) setModalPoint({
                         period: p.period as string,

@@ -341,12 +341,22 @@ SELECT
         ? await queryWithRetry<{ id: number; name: string | null; slug: string }>(
             'SELECT id, name, slug FROM chats WHERE id = ANY($1::bigint[])',
             [chatIdsInData]
-          ).then((r) => new Map(r.rows.map((row) => [row.id, { name: row.name ?? String(row.id), slug: row.slug }])))
+          ).then((r) =>
+            new Map(
+              r.rows.map((row) => {
+                const displayName =
+                  (row.name && row.name.trim()) || (row.slug && !/^\d+$/.test(row.slug))
+                    ? (row.name?.trim() || row.slug)
+                    : `Chat ${row.id}`;
+                return [row.id, { name: displayName, slug: row.slug }];
+              })
+            )
+          )
         : new Map<number, { name: string; slug: string }>();
     const allPeriodsM = minDate && maxDate ? fillPeriods(minDate, maxDate, groupBy) : [];
     const allPeriodsR = rMinDate && rMaxDate ? fillPeriods(rMinDate, rMaxDate, groupBy) : [];
     for (const cid of chatIdsInData) {
-      const info = chatNames.get(cid) ?? { name: String(cid), slug: `chat_${cid}` };
+      const info = chatNames.get(cid) ?? { name: `Chat ${cid}`, slug: `chat_${cid}` };
       const byPeriodM = new Map<string, number>();
       for (const r of mByChatResult.rows as { period: string; chat_id: string; count: number }[]) {
         if (Number(r.chat_id) === cid) byPeriodM.set(normalizePeriodKey(r.period, groupBy), r.count);
