@@ -4,6 +4,7 @@
  */
 
 import { pool } from '@/lib/db/client';
+import { log } from '@/lib/logger';
 
 export const SETTING_OPENAI_API_KEY = 'openai_api_key';
 export const SETTING_PERSONA_DAYS_BACK = 'persona_days_back';
@@ -221,8 +222,10 @@ let _personaLabelsCache: { value: Record<string, string>; expiresAt: number } | 
 /** Stats cache TTL in minutes (1–60). Result is cached in-process for 60 s. */
 export async function getCacheTtlStatsMinutes(): Promise<number> {
   if (_cacheTtlCache && Date.now() < _cacheTtlCache.expiresAt) {
+    log.db(`[DBG-01a8b2 H6] getCacheTtlStatsMinutes cache hit value=${_cacheTtlCache.value}`);
     return _cacheTtlCache.value;
   }
+  log.db('[DBG-01a8b2 H6] getCacheTtlStatsMinutes cache miss');
   const { rows } = await pool.query<{ value: string }>(
     'SELECT value FROM settings WHERE key = $1',
     [SETTING_CACHE_TTL_STATS_MINUTES]

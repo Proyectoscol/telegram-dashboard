@@ -3,6 +3,7 @@ import { ensureSchema, queryWithRetry } from '@/lib/db/client';
 import { getOrFetch, cacheKey } from '@/lib/cache';
 import { getCacheTtlStatsMinutes } from '@/lib/settings';
 import { parseChatIds } from '@/lib/api/chat-params';
+import { log } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,18 +11,35 @@ export const dynamic = 'force-dynamic';
 const USERS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
 export async function GET(request: NextRequest) {
+  const runId = `users-list-${Math.random().toString(36).slice(2, 8)}`;
   try {
     const { searchParams } = new URL(request.url);
     const isPremium = searchParams.get('is_premium') ?? '';
     const assignedTo = searchParams.get('assigned_to') ?? '';
     const chatIds = parseChatIds(searchParams);
+    // #region agent log
+    fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H6',location:'app/api/users/route.ts:18',message:'users route start',data:{isPremium,hasAssignedTo:assignedTo !== '',chatIdsCount:chatIds?.length ?? 0},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    log.db(`[DBG-01a8b2 H6] ${runId} users start premium=${isPremium || 'all'} assigned=${assignedTo ? '1' : '0'} chatIds=${chatIds?.length ?? 0}`);
     const key = cacheKey('users-list', {
       is_premium: isPremium,
       assigned_to: assignedTo,
       chatIds: chatIds?.join(',') ?? 'all',
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H6',location:'app/api/users/route.ts:25',message:'users before getCacheTtlStatsMinutes',data:{key},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    log.db(`[DBG-01a8b2 H6] ${runId} users before ttl key=${key}`);
     const cacheTtlMs = Math.min((await getCacheTtlStatsMinutes()) * 60 * 1000, USERS_CACHE_TTL_MS);
+    // #region agent log
+    fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H6',location:'app/api/users/route.ts:28',message:'users after getCacheTtlStatsMinutes',data:{cacheTtlMs},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    log.db(`[DBG-01a8b2 H6] ${runId} users after ttl cacheTtlMs=${cacheTtlMs}`);
     const rows = await getOrFetch<unknown[]>(key, async () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H7',location:'app/api/users/route.ts:31',message:'users fetcher start',data:{key},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      log.db(`[DBG-01a8b2 H7] ${runId} users fetcher start key=${key}`);
       await ensureSchema();
 
       const conditions: string[] = ['1=1'];
@@ -96,11 +114,18 @@ export async function GET(request: NextRequest) {
         ORDER BY la.last_date DESC NULLS LAST, u.display_name
       `;
       const { rows: fetchedRows } = await queryWithRetry(query, params);
+      // #region agent log
+      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H7',location:'app/api/users/route.ts:102',message:'users query done',data:{rows:Array.isArray(fetchedRows)?fetchedRows.length:null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      log.db(`[DBG-01a8b2 H7] ${runId} users query done rows=${Array.isArray(fetchedRows) ? fetchedRows.length : 'na'}`);
       return fetchedRows;
     }, cacheTtlMs);
     return NextResponse.json(rows);
   } catch (err) {
-    const { log } = await import('@/lib/logger');
+    // #region agent log
+    fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId,hypothesisId:'H6',location:'app/api/users/route.ts:108',message:'users route error',data:{error:err instanceof Error ? err.message : 'unknown'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    log.db(`[DBG-01a8b2 H6] ${runId} users error=${err instanceof Error ? err.message : 'unknown'}`);
     log.error('users', 'Users list failed', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to fetch users' },
