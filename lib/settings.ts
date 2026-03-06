@@ -195,15 +195,29 @@ export async function getPersonaLabels(): Promise<Record<string, string>> {
   }
 }
 
-/** Stats cache TTL in minutes (1–60). */
+// Process-level caches so that hot-path callers (overview, users-summary, users-list)
+// don't hit the DB on every request. TTLs are intentionally short so settings changes
+// propagate within a minute.
+let _cacheTtlCache: { value: number; expiresAt: number } | null = null;
+let _personaPromptsCache: { value: { systemPrompt: string; userPromptTemplate: string }; expiresAt: number } | null = null;
+let _dayInsightPromptsCache: { value: { systemPrompt: string; userPromptTemplate: string }; expiresAt: number } | null = null;
+
+/** Stats cache TTL in minutes (1–60). Result is cached in-process for 60 s. */
 export async function getCacheTtlStatsMinutes(): Promise<number> {
+  // #region agent log
+  fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'settings.ts:getCacheTtlStatsMinutes',message:'called',data:{cacheHit:!!(_cacheTtlCache && Date.now() < _cacheTtlCache.expiresAt)},timestamp:Date.now(),runId:'post-fix-v3',hypothesisId:'SETTINGS-HIT'})}).catch(()=>{});
+  // #endregion
+  if (_cacheTtlCache && Date.now() < _cacheTtlCache.expiresAt) {
+    return _cacheTtlCache.value;
+  }
   const { rows } = await pool.query<{ value: string }>(
     'SELECT value FROM settings WHERE key = $1',
     [SETTING_CACHE_TTL_STATS_MINUTES]
   );
-  if (rows.length === 0) return 2;
-  const n = parseInt(rows[0].value, 10);
-  return Number.isNaN(n) ? 2 : Math.max(1, Math.min(60, n));
+  const raw = rows.length === 0 ? 2 : parseInt(rows[0].value, 10);
+  const value = Number.isNaN(raw) ? 2 : Math.max(1, Math.min(60, raw));
+  _cacheTtlCache = { value, expiresAt: Date.now() + 60_000 };
+  return value;
 }
 
 /** Ingest: slug for the main chat (e.g. "main"). Deprecated: ingest now uses per-chat slug. */
@@ -242,6 +256,9 @@ export async function getPersonaOpenAIModel(): Promise<string> {
 
 /** Returns system prompt and user prompt template for persona. Seeds defaults into settings if missing (e.g. on first deploy). */
 export async function getPersonaPrompts(): Promise<{ systemPrompt: string; userPromptTemplate: string }> {
+  if (_personaPromptsCache && Date.now() < _personaPromptsCache.expiresAt) {
+    return _personaPromptsCache.value;
+  }
   const { rows } = await pool.query<{ key: string; value: string }>(
     "SELECT key, value FROM settings WHERE key = ANY($1::text[])",
     [[SETTING_PERSONA_SYSTEM_PROMPT, SETTING_PERSONA_USER_PROMPT_TEMPLATE]]
@@ -267,14 +284,19 @@ export async function getPersonaPrompts(): Promise<{ systemPrompt: string; userP
     }
   }
 
-  return {
+  const result = {
     systemPrompt: systemPrompt ?? DEFAULT_PERSONA_SYSTEM_PROMPT,
     userPromptTemplate: userPromptTemplate ?? DEFAULT_PERSONA_USER_PROMPT_TEMPLATE,
   };
+  _personaPromptsCache = { value: result, expiresAt: Date.now() + 60_000 };
+  return result;
 }
 
 /** Returns system prompt and user prompt template for day insight. Seeds defaults if missing. */
 export async function getDayInsightPrompts(): Promise<{ systemPrompt: string; userPromptTemplate: string }> {
+  if (_dayInsightPromptsCache && Date.now() < _dayInsightPromptsCache.expiresAt) {
+    return _dayInsightPromptsCache.value;
+  }
   const { rows } = await pool.query<{ key: string; value: string }>(
     "SELECT key, value FROM settings WHERE key = ANY($1::text[])",
     [[SETTING_DAY_INSIGHT_SYSTEM_PROMPT, SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE]]
@@ -300,8 +322,10 @@ export async function getDayInsightPrompts(): Promise<{ systemPrompt: string; us
     }
   }
 
-  return {
+  const result = {
     systemPrompt: systemPrompt ?? DEFAULT_DAY_INSIGHT_SYSTEM_PROMPT,
     userPromptTemplate: userPromptTemplate ?? DEFAULT_DAY_INSIGHT_USER_PROMPT_TEMPLATE,
   };
+  _dayInsightPromptsCache = { value: result, expiresAt: Date.now() + 60_000 };
+  return result;
 }

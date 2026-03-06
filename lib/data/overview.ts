@@ -1,4 +1,4 @@
-import { get, set, cacheKey } from '@/lib/cache';
+import { get, set, cacheKey, getOrFetch } from '@/lib/cache';
 import { ensureSchema, queryWithRetry } from '@/lib/db/client';
 import { getCacheTtlStatsMinutes } from '@/lib/settings';
 
@@ -122,9 +122,12 @@ export async function getOverviewData(opts: GetOverviewDataOpts = {}): Promise<O
     end: end ?? '',
     byChat: byChat ? '1' : '0',
   });
-  const cached = await get<OverviewBody>(key);
-  if (cached != null) return cached;
 
+  // getCacheTtlStatsMinutes is now cached in-process (free call); read it once before
+  // entering getOrFetch so we can pass the TTL to the cache-write without a second call.
+  const cacheTtlMs = (await getCacheTtlStatsMinutes()) * 60 * 1000;
+
+  return getOrFetch<OverviewBody>(key, async () => {
   await ensureSchema();
 
   const periodExpr =
@@ -263,8 +266,6 @@ SELECT
       messagesOverTimeByChat: [],
       reactionsOverTimeByChat: [],
     };
-    const cacheTtlMs = (await getCacheTtlStatsMinutes()) * 60 * 1000;
-    await set(key, empty, cacheTtlMs);
     return empty;
   }
 
@@ -381,7 +382,6 @@ SELECT
     messagesOverTimeByChat,
     reactionsOverTimeByChat,
   };
-  const cacheTtlMs = (await getCacheTtlStatsMinutes()) * 60 * 1000;
-  await set(key, body, cacheTtlMs);
   return body;
+  }, cacheTtlMs);
 }
