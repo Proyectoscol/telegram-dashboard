@@ -261,20 +261,28 @@ th {
   vertical-align: middle;
 }
 .sortable-th .sort-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   color: #6e767d;
   cursor: pointer;
-  padding: 0 0.15rem;
-  font-size: 0.7rem;
-  line-height: 0.9;
+  padding: 0.1rem 0.2rem;
+  border-radius: 2px;
 }
 .sortable-th .sort-arrow:hover {
   color: #e7e9ea;
+  background: rgba(255, 255, 255, 0.06);
+}
+.sortable-th .sort-arrow svg {
+  display: block;
 }
 .sortable-th .sort-arrow-active {
   color: #1d9bf0;
-  font-weight: 700;
+}
+.sortable-th .sort-arrow-active:hover {
+  color: #1a8cd8;
 }
 .th-index { width: 2.5rem; }
 .th-action { width: 6rem; }

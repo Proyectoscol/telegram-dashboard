@@ -484,6 +484,17 @@ export function Dashboard() {
             Go to contact
           </a>
         ) : null}
+        {(activitySortBy !== 'messages_sent' || activitySortDir !== 'desc') && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => { setActivitySortBy('messages_sent'); setActivitySortDir('desc'); setActivityPage(1); }}
+            style={{ marginLeft: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+            title="Reset Activity table sort to default (Messages, descending)"
+          >
+            Reset sort
+          </button>
+        )}
       </div>
 
       <LoadingOverlay active={loading && !!data} message="Updating…">
@@ -872,6 +883,17 @@ export function Dashboard() {
             onChange={(e) => setActivitySearch(e.target.value)}
             style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
           />
+          {(activitySortBy !== 'messages_sent' || activitySortDir !== 'desc') && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setActivitySortBy('messages_sent'); setActivitySortDir('desc'); setActivityPage(1); }}
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+              title="Reset sort to default (Messages, descending)"
+            >
+              Reset sort
+            </button>
+          )}
         </div>
         <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
           <table>
@@ -908,7 +930,7 @@ export function Dashboard() {
                         aria-label={`Sort by ${label} ascending`}
                         title="Sort ascending"
                       >
-                        ↑
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
                       </button>
                       <button
                         type="button"
@@ -917,7 +939,7 @@ export function Dashboard() {
                         aria-label={`Sort by ${label} descending`}
                         title="Sort descending"
                       >
-                        ↓
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
                       </button>
                     </span>
                   </th>
