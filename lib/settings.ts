@@ -220,9 +220,6 @@ let _personaLabelsCache: { value: Record<string, string>; expiresAt: number } | 
 
 /** Stats cache TTL in minutes (1–60). Result is cached in-process for 60 s. */
 export async function getCacheTtlStatsMinutes(): Promise<number> {
-  // #region agent log
-  fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'settings.ts:getCacheTtlStatsMinutes',message:'called',data:{cacheHit:!!(_cacheTtlCache && Date.now() < _cacheTtlCache.expiresAt)},timestamp:Date.now(),runId:'post-fix-v3',hypothesisId:'SETTINGS-HIT'})}).catch(()=>{});
-  // #endregion
   if (_cacheTtlCache && Date.now() < _cacheTtlCache.expiresAt) {
     return _cacheTtlCache.value;
   }

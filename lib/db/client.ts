@@ -64,12 +64,6 @@ function buildPool(): Pool {
     ? { rejectUnauthorized: false }
     : undefined;
 
-  // #region agent log
-  const maskedUrl = connectionString.replace(/:([^:@/]+)@/, ':***@');
-  log.db(`[DBG-01a8b2 H1] buildPool — url: ${maskedUrl} | pooler: ${isSupabasePooler} | max: ${POOL_MAX} | connectTimeoutMs: ${CONNECTION_TIMEOUT_MS}`);
-  fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:buildPool',message:'buildPool called',data:{maskedUrl,isSupabasePooler,max:POOL_MAX,connectTimeoutMs:CONNECTION_TIMEOUT_MS},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
-
   const poolOptions: import('pg').PoolConfig = {
     connectionString,
     max: POOL_MAX,
@@ -106,37 +100,8 @@ function getPool(): Pool {
   return _pool;
 }
 
-// Track whether the current .query() call is coming from queryWithRetry
-// (which has its own TIMING log). If so, skip the DIRECT log to avoid noise.
-let _inQueryWithRetry = false;
-
 export const pool = new Proxy({} as Pool, {
   get(_, prop) {
-    if (prop === 'query') {
-      const actualPool = getPool();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return function poolQueryProxy(...args: any[]) {
-        if (_inQueryWithRetry) {
-          // Already logged by queryWithRetry's TIMING log — no double-logging
-          return (actualPool as unknown as Record<string, (...a: unknown[]) => unknown>).query(...args);
-        }
-        // #region agent log
-        const t0 = Date.now();
-        const preview = (typeof args[0] === 'string' ? args[0] : ((args[0] as QueryConfig)?.text ?? '')).trim().slice(0, 70).replace(/\s+/g, ' ');
-        const p2 = actualPool as unknown as { totalCount: number; idleCount: number; waitingCount: number };
-        const result = (actualPool as unknown as Record<string, (...a: unknown[]) => unknown>).query(...args) as Promise<import('pg').QueryResult>;
-        result.then(() => {
-          const dur = Date.now() - t0;
-          const state = `total=${p2.totalCount}, idle=${p2.idleCount}, waiting=${p2.waitingCount}`;
-          log.db(`[DBG-01a8b2 DIRECT] direct pool.query OK in ${dur}ms | pool: ${state} — ${preview}`);
-          fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:pool.query.proxy',message:'direct pool.query OK',data:{durationMs:dur,pool:{total:p2.totalCount,idle:p2.idleCount,waiting:p2.waitingCount},preview},timestamp:Date.now(),runId:'post-fix-v3',hypothesisId:'DIRECT'})}).catch(()=>{});
-        }).catch((err: Error) => {
-          log.db(`[DBG-01a8b2 DIRECT] direct pool.query FAIL in ${Date.now()-t0}ms — ${preview}: ${err.message?.slice(0,80)}`);
-        });
-        return result;
-        // #endregion
-      };
-    }
     return (getPool() as unknown as Record<string, unknown>)[prop as string];
   },
 });
@@ -152,25 +117,10 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
 ): Promise<import('pg').QueryResult<T>> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    // #region agent log
-    const _qt0 = Date.now();
-    const _qpreview = (typeof text === 'string' ? text : (text as QueryConfig).text ?? '').trim().slice(0, 60).replace(/\s+/g, ' ');
-    // #endregion
     try {
-      _inQueryWithRetry = true;
-      let result: import('pg').QueryResult<T>;
-      try {
-        result = values != null
-          ? await pool.query<T>(text as string, values)
-          : await pool.query<T>(text as string);
-      } finally {
-        _inQueryWithRetry = false;
-      }
-      // #region agent log
-      const _qDur = Date.now()-_qt0;
-      log.db(`[DBG-01a8b2 TIMING] query OK in ${_qDur}ms | pool: total=${getPool().totalCount}, idle=${getPool().idleCount}, waiting=${getPool().waitingCount} — ${_qpreview}`);
-      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'query OK',data:{durationMs:_qDur,pool:{total:getPool().totalCount,idle:getPool().idleCount,waiting:getPool().waitingCount},preview:_qpreview},timestamp:Date.now(),runId:'post-fix-v2',hypothesisId:'TIMING'})}).catch(()=>{});
-      // #endregion
+      const result = values != null
+        ? await pool.query<T>(text as string, values)
+        : await pool.query<T>(text as string);
       return result;
     } catch (err) {
       lastErr = err;
@@ -178,27 +128,12 @@ export async function queryWithRetry<T extends QueryResultRow = QueryResultRow>(
       const isAcquireTimeout =
         msg.includes('timeout exceeded when trying to connect') ||
         msg.includes('Connection terminated due to connection timeout');
-      const isQueryTimeout = msg.includes('Query read timeout');
       const isRetryable =
         !isAcquireTimeout &&
         (msg.includes('timeout') ||
           msg.includes('Connection terminated') ||
           msg.includes('ECONNRESET') ||
           msg.includes('EPIPE'));
-      // #region agent log
-      if (isAcquireTimeout) {
-        const p = getPool();
-        const poolState = { total: p.totalCount, idle: p.idleCount, waiting: p.waitingCount };
-        log.db(`[DBG-01a8b2 H2/H3] queryWithRetry acquire-timeout — pool state: ${JSON.stringify(poolState)}`);
-        fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'acquire timeout',data:{poolState,msg:msg.slice(0,120)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      }
-      if (isQueryTimeout) {
-        const p = getPool();
-        const poolState = { total: p.totalCount, idle: p.idleCount, waiting: p.waitingCount };
-        log.db(`[DBG-01a8b2 POST-FIX] query_timeout fired (30s) — pool state: ${JSON.stringify(poolState)}`);
-        fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:queryWithRetry',message:'query_timeout fired',data:{poolState,msg:msg.slice(0,120)},timestamp:Date.now(),hypothesisId:'POST-FIX'})}).catch(()=>{});
-      }
-      // #endregion
       if (isRetryable && attempt < maxRetries) {
         const delayMs = 400 * (attempt + 1);
         log.db(`queryWithRetry: attempt ${attempt + 1} failed (${msg.slice(0, 80)}), retrying in ${delayMs}ms…`);
@@ -237,31 +172,13 @@ let schemaPromise: Promise<void> | null = null;
 let rlsPromise: Promise<void> | null = null;
 
 export async function ensureSchema(): Promise<void> {
-  // #region agent log
-  const alreadyCached = !!schemaPromise;
-  const maskedForLog = (() => { try { const cs = getConnectionString(); return cs.replace(/:([^:@/]+)@/,':***@'); } catch { return 'ERROR_BUILDING'; } })();
-  log.db(`[DBG-01a8b2 H6/H7/H8] ensureSchema called — cached: ${alreadyCached} | url: ${maskedForLog} | pool: total=${(pool as unknown as {totalCount:number}).totalCount ?? '?'}, idle=${(pool as unknown as {idleCount:number}).idleCount ?? '?'}, waiting=${(pool as unknown as {waitingCount:number}).waitingCount ?? '?'}`);
-  fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema',message:'ensureSchema called',data:{alreadyCached,maskedUrl:maskedForLog,total:(pool as any).totalCount,idle:(pool as any).idleCount,waiting:(pool as any).waitingCount},timestamp:Date.now(),hypothesisId:'H8'})}).catch(()=>{});
-  // #endregion
   if (schemaPromise) return schemaPromise;
   schemaPromise = (async () => {
-    // #region agent log
-    log.db('[DBG-01a8b2 H6] ensureSchema: running migration SQL now');
-    fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema-inner',message:'running migration SQL',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
     const schemaPath = join(process.cwd(), 'lib', 'db', 'schema.sql');
     const sql = readFileSync(schemaPath, 'utf-8');
     try {
       await pool.query(sql);
-      // #region agent log
-      log.db('[DBG-01a8b2 H6] ensureSchema: migration SQL done');
-      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema-inner',message:'migration SQL done',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-      // #endregion
     } catch (schemaErr) {
-      // #region agent log
-      log.db(`[DBG-01a8b2 H6] ensureSchema: migration SQL FAILED — ${schemaErr instanceof Error ? schemaErr.message : String(schemaErr)}`);
-      fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',location:'client.ts:ensureSchema-inner',message:'migration SQL FAILED',data:{err:schemaErr instanceof Error?schemaErr.message:String(schemaErr)},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-      // #endregion
       throw schemaErr;
     }
     if (process.env.SUPABASE_URL) {
