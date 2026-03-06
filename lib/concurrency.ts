@@ -1,3 +1,5 @@
+import { log } from '@/lib/logger';
+
 const inFlight = new Map<string, number>();
 const waitQueues = new Map<string, Array<() => void>>();
 
@@ -18,6 +20,7 @@ export async function withConcurrencyLimit<T>(
     // #region agent log
     fetch('http://127.0.0.1:7925/ingest/ac1c021b-cf07-40d1-a3a2-60935c2d0072',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'01a8b2'},body:JSON.stringify({sessionId:'01a8b2',runId:`limit:${key}`,hypothesisId:'H1',location:'lib/concurrency.ts:17',message:'withConcurrencyLimit waiting',data:{key,limit,inFlight:inFlight.get(key) ?? 0,queueLength:(waitQueues.get(key) ?? []).length},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
+    log.db(`[DBG-01a8b2 H1] withConcurrencyLimit waiting key=${key} limit=${limit} inFlight=${inFlight.get(key) ?? 0} queue=${(waitQueues.get(key) ?? []).length}`);
     await new Promise<void>((resolve) => {
       const queue = waitQueues.get(key) ?? [];
       queue.push(resolve);
