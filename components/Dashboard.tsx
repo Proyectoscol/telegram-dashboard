@@ -484,15 +484,20 @@ export function Dashboard() {
             Go to contact
           </a>
         ) : null}
-        {(activitySortBy !== 'messages_sent' || activitySortDir !== 'desc') && (
+        {(groupBy !== 'day' || quickRange !== 'all' || selectedChatIds.length > 0 || fromId !== '') && (
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => { setActivitySortBy('messages_sent'); setActivitySortDir('desc'); setActivityPage(1); }}
+            onClick={() => {
+              setGroupBy('day');
+              setQuickRange('all');
+              setSelectedChatIds([]);
+              setFromId('');
+            }}
             style={{ marginLeft: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
-            title="Reset Activity table sort to default (Messages, descending)"
+            title="Reset Group by, Range, Chats, and Contact to defaults"
           >
-            Reset sort
+            Reset filters
           </button>
         )}
       </div>
