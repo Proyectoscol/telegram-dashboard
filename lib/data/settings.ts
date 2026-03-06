@@ -1,4 +1,5 @@
-import { ensureSchema, pool } from '@/lib/db/client';
+import { ensureSchema, queryWithRetry } from '@/lib/db/client';
+import { getOrFetch } from '@/lib/cache';
 import {
   SETTING_OPENAI_API_KEY,
   SETTING_PERSONA_DAYS_BACK,
@@ -53,18 +54,22 @@ const PERSONA_KEYS_FOR_GET = [
   SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE,
 ];
 
-/** Returns full settings payload for GET /api/settings. Seeds default prompts if missing. */
+const SETTINGS_DATA_CACHE_KEY = 'settings-data';
+const SETTINGS_DATA_TTL_MS = 60_000;
+
+/** Returns full settings payload for GET /api/settings. Seeds default prompts if missing. Cached 60s to avoid pool pressure. */
 export async function getSettingsData(): Promise<Record<string, unknown>> {
-  await ensureSchema();
-  await getPersonaPrompts();
-  await getDayInsightPrompts();
-  const openaiRows = await pool.query<{ key: string }>('SELECT key FROM settings WHERE key = $1', [SETTING_OPENAI_API_KEY]);
-  const personaRows = await pool.query<{ key: string; value: string }>(
-    'SELECT key, value FROM settings WHERE key = ANY($1::text[])',
-    [PERSONA_KEYS_FOR_GET]
-  );
-  const map = new Map((personaRows.rows as { key: string; value: string }[]).map((r) => [r.key, r.value]));
-  return {
+  return getOrFetch<Record<string, unknown>>(SETTINGS_DATA_CACHE_KEY, async () => {
+    await ensureSchema();
+    await getPersonaPrompts();
+    await getDayInsightPrompts();
+    const openaiRows = await queryWithRetry<{ key: string }>('SELECT key FROM settings WHERE key = $1', [SETTING_OPENAI_API_KEY]);
+    const personaRows = await queryWithRetry<{ key: string; value: string }>(
+      'SELECT key, value FROM settings WHERE key = ANY($1::text[])',
+      [PERSONA_KEYS_FOR_GET]
+    );
+    const map = new Map((personaRows.rows as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+    return {
     openai_api_key_configured: openaiRows.rows.length > 0,
     persona_days_back: map.get(SETTING_PERSONA_DAYS_BACK) ?? 'unlimited',
     persona_max_messages: map.get(SETTING_PERSONA_MAX_MESSAGES) ?? '80',
@@ -95,4 +100,5 @@ export async function getSettingsData(): Promise<Record<string, unknown>> {
     day_insight_system_prompt: map.get(SETTING_DAY_INSIGHT_SYSTEM_PROMPT)?.trim() ?? DEFAULT_DAY_INSIGHT_SYSTEM_PROMPT,
     day_insight_user_prompt_template: map.get(SETTING_DAY_INSIGHT_USER_PROMPT_TEMPLATE)?.trim() ?? DEFAULT_DAY_INSIGHT_USER_PROMPT_TEMPLATE,
   };
+  }, SETTINGS_DATA_TTL_MS);
 }

@@ -20,6 +20,8 @@ This document describes the fixes applied to resolve **"timeout exceeded when tr
 
 So the fix was: **stop hammering the DB with uncached settings/utility reads** and **let the pool shrink when idle**, plus minor pool/config tweaks.
 
+**Paid Supabase:** There are no free-tier throttles; the same caching and pool discipline still applies so the app does not exhaust connections under load.
+
 ---
 
 ## Fixes applied
@@ -38,17 +40,23 @@ These functions now use in-memory, 60-second TTL caches so they hit the DB at mo
 
 Cache variables: `_cacheTtlCache`, `_listLimitsCache`, `_personaLabelsCache`, `_personaPromptsCache`, `_dayInsightPromptsCache`. TTL is 60 seconds so settings changes propagate within a minute.
 
-### 2. Overview and chats: single-flight + retry
+### 2. Overview, chats, and users-summary: single-flight + retry
 
 - **`lib/data/overview.ts`** — `getOverviewData()` now uses `getOrFetch()` (from `lib/cache.ts`) so concurrent requests for the same overview key share one DB round-trip instead of each running the heavy CTE.
 - **`lib/data/chats.ts`** — Chats fetch uses `queryWithRetry()` instead of raw `pool.query()`, and is already behind `getOrFetch()` for single-flight.
+- **`lib/data/users-summary.ts`** — `getUsersSummaryData()` uses `getOrFetch()` for single-flight. The query includes CTEs for **longest consecutive-day streak** (distinct_days, with_grp, streak_lengths, longest_streak), so it can be heavier than before; caching and single-flight avoid repeated long runs.
 
-### 3. AI usage cached with `getOrFetch` (`lib/data/ai-usage.ts`)
+### 3. Settings data cached with `getOrFetch` (`lib/data/settings.ts`)
+
+- **Before:** Every bootstrap/settings request called `getSettingsData()`, which did `ensureSchema()`, `getPersonaPrompts()`, `getDayInsightPrompts()`, and two direct `pool.query()` calls with no cache.
+- **After:** `getSettingsData()` is wrapped in `getOrFetch('settings-data', fetcher, 60_000)`. Result is cached 60s and concurrent requests share one fetch. The two SELECTs inside use `queryWithRetry()` for consistency.
+
+### 4. AI usage cached with `getOrFetch` (`lib/data/ai-usage.ts`)
 
 - **Before:** Every bootstrap/settings load ran 4+ `pool.query()` calls (including full table scan on `ai_usage_logs`) with no cache.
 - **After:** Wrapped in `getOrFetch('ai-usage:' + limit, fetcher, 60_000)` so result is cached 60s and concurrent requests share one fetch.
 
-### 4. Pool configuration (`lib/db/client.ts`)
+### 5. Pool configuration (`lib/db/client.ts`)
 
 - **POOL_MAX = 5** — Keeps concurrent DB load low; with fast queries (~100–700 ms) and single-flight/caching, 5 connections are enough and the pool can drain when idle.
 - **maxLifetimeSeconds = 600** — Connections are recycled after 10 minutes so long-lived connections don’t accumulate indefinitely.
@@ -56,11 +64,11 @@ Cache variables: `_cacheTtlCache`, `_listLimitsCache`, `_personaLabelsCache`, `_
 - **connectionTimeoutMillis = 40000** — Time allowed to acquire a connection from the pool before failing (must be &gt; query duration).
 - **query_timeout** (pg client) — 30s per-query timeout so a stuck query doesn’t hold a connection forever.
 
-### 5. Cache TTL jitter (`lib/cache.ts`)
+### 6. Cache TTL jitter (`lib/cache.ts`)
 
 In `getOrFetch()`, the TTL passed to `set()` is varied with ±20% jitter so different cache keys don’t all expire at the same time and cause a thundering herd of DB queries.
 
-### 6. Supabase: Session Pooler (port 5432)
+### 7. Supabase: Session Pooler (port 5432)
 
 The app is intended to use **Session Pooler** (e.g. `aws-0-eu-central-1.pooler.supabase.com:5432`), not Direct or Transaction Pooler on 6543, for Docker/persistent containers. See `.env.example` for recommended `POSTGRES_HOST` / `POSTGRES_PORT`.
 
@@ -81,7 +89,7 @@ The app is intended to use **Session Pooler** (e.g. `aws-0-eu-central-1.pooler.s
    If a new endpoint runs the same heavy query for the same key from many concurrent requests, wrap it in `getOrFetch(key, fetcher, ttlMs)` so only one request hits the DB and the rest share the result.
 
 5. **Supabase / platform limits**  
-   On Supabase free tier, high concurrency or long-running queries can throttle the DB. Keeping POOL_MAX low (5), queries short (and cached), and using Session Pooler reduces the chance of timeouts.
+   On Supabase free tier, high concurrency or long-running queries can throttle the DB. On **paid Supabase** there are no free-tier throttles, but the same discipline helps: keep POOL_MAX modest (5), queries short and cached, use Session Pooler, and avoid uncached per-request `pool.query()` so the pool can drain when idle.
 
 ---
 
@@ -101,6 +109,8 @@ The app is intended to use **Session Pooler** (e.g. `aws-0-eu-central-1.pooler.s
 | `lib/cache.ts` | TTL jitter in getOrFetch |
 | `lib/data/overview.ts` | getOverviewData uses getOrFetch; single-flight for overview |
 | `lib/data/chats.ts` | pool.query → queryWithRetry; already uses getOrFetch |
+| `lib/data/users-summary.ts` | getUsersSummaryData uses getOrFetch; single-flight; query includes streak CTEs (heavier) |
+| `lib/data/settings.ts` | getSettingsData wrapped in getOrFetch('settings-data', 60s); internal queries use queryWithRetry |
 | `lib/data/ai-usage.ts` | getOrFetch wrapper, 60s cache; getListLimits cached in settings |
 | `lib/db/client.ts` | POOL_MAX=5, maxLifetimeSeconds=600, connectionTimeoutMillis=40000, idleTimeoutMillis=30000, query_timeout 30s |
 
