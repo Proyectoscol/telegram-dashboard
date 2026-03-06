@@ -129,6 +129,12 @@ export function Dashboard() {
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#f91854', '#ffd400', '#7856ff', '#00d4aa', '#7c3aed', '#ea580c', '#0891b2', '#4f46e5'];
+  const chatIdToColor = useMemo(() => {
+    const sorted = [...chats].sort((a, b) => a.id - b.id);
+    const map = new Map<number, string>();
+    sorted.forEach((c, i) => map.set(c.id, CHAT_COLORS[i % CHAT_COLORS.length]));
+    return (chatId: number) => map.get(chatId) ?? CHAT_COLORS[Math.abs(chatId) % CHAT_COLORS.length];
+  }, [chats]);
   const [usersSummary, setUsersSummary] = useState<
     {
       from_id: string;
@@ -593,14 +599,14 @@ export function Dashboard() {
                   labelFormatter={(label) => label}
                 />
                 {byChatMessages.length > 0 ? (
-                  byChatMessages.map((c, i) => (
+                  byChatMessages.map((c) => (
                     <Area
                       key={c.chatId}
                       type="monotone"
                       dataKey={c.slug}
                       name={c.chatName}
-                      stroke={CHAT_COLORS[i % CHAT_COLORS.length]}
-                      fill={CHAT_COLORS[i % CHAT_COLORS.length]}
+                      stroke={chatIdToColor(c.chatId)}
+                      fill={chatIdToColor(c.chatId)}
                       fillOpacity={0.3}
                       dot={{ r: 4, cursor: 'pointer' }}
                       activeDot={{ r: 6, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
@@ -874,15 +880,15 @@ export function Dashboard() {
                   labelFormatter={(label) => label}
                 />
                 {byChatReactions.length > 0 ? (
-                  byChatReactions.map((c, i) => (
+                  byChatReactions.map((c) => (
                     <Line
                       key={c.chatId}
                       type="monotone"
                       dataKey={c.slug}
                       name={c.chatName}
-                      stroke={CHAT_COLORS[i % CHAT_COLORS.length]}
+                      stroke={chatIdToColor(c.chatId)}
                       strokeWidth={2}
-                      dot={{ fill: CHAT_COLORS[i % CHAT_COLORS.length], r: 4, cursor: 'pointer' }}
+                      dot={{ fill: chatIdToColor(c.chatId), r: 4, cursor: 'pointer' }}
                       activeDot={{ r: 6, cursor: 'pointer', onClick: (_e: unknown, payload: unknown) => {
                         const p = (payload as { payload?: Record<string, unknown> })?.payload ?? (payload as Record<string, unknown>);
                         if (p?.period != null) setModalPoint({
