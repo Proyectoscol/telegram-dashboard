@@ -151,6 +151,7 @@ export function Dashboard() {
       first_activity: string | null;
       last_activity: string | null;
       active_days: number;
+      longest_streak_days: number;
       reactions_ratio: number;
       top_reacted_to_id: string | null;
       top_reacted_to_name: string | null;
@@ -172,6 +173,7 @@ export function Dashboard() {
   const [activityPage, setActivityPage] = useState(1);
   const [inactivePage, setInactivePage] = useState(1);
   const [atRiskPage, setAtRiskPage] = useState(1);
+  const [hotPage, setHotPage] = useState(1);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
   const start = range.start;
   const end = range.end;
@@ -278,6 +280,9 @@ export function Dashboard() {
   useEffect(() => {
     setAtRiskPage(1);
   }, [activitySearch, selectedChatIds, fromId, start, end, usersSummary.length]);
+  useEffect(() => {
+    setHotPage(1);
+  }, [activitySearch, selectedChatIds, fromId, start, end, usersSummary.length]);
 
   if (loading && !data) {
     return <LoadingCard message="Loading dashboard…" />;
@@ -364,6 +369,28 @@ export function Dashboard() {
     return ta - tb;
   });
   const atRiskPaged = atRiskSorted.slice((atRiskPage - 1) * PAGE_SIZE, atRiskPage * PAGE_SIZE);
+
+  const fiveDaysAgo = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 5);
+    return d.getTime();
+  })();
+  const hotUsers = inScopeUsers.filter((u) => {
+    const streak = Number(u.longest_streak_days) ?? 0;
+    if (streak < 5) return false;
+    const last = u.last_activity ? new Date(u.last_activity).getTime() : null;
+    return last != null && last >= fiveDaysAgo;
+  });
+  const hotFiltered = hotUsers.filter(matchesActivitySearch);
+  const hotSorted = [...hotFiltered].sort((a, b) => {
+    const streakA = Number(a.longest_streak_days) ?? 0;
+    const streakB = Number(b.longest_streak_days) ?? 0;
+    if (streakB !== streakA) return streakB - streakA;
+    const ta = a.last_activity ? new Date(a.last_activity).getTime() : 0;
+    const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
+    return tb - ta;
+  });
+  const hotPaged = hotSorted.slice((hotPage - 1) * PAGE_SIZE, hotPage * PAGE_SIZE);
 
   const activityFiltered = activeUsers.filter(matchesActivitySearch);
   const inactiveFiltered = inactiveUsers.filter(matchesActivitySearch);
@@ -963,6 +990,65 @@ export function Dashboard() {
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginTop: '0.75rem' }}>
           <a href="/contacts">Full contacts table</a> with CRM and call logging.
         </p>
+      </div>
+
+      <div className="card">
+        <h2>Hot Users</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+          Contacts who posted 5 or more days in a row, with their most recent post 5 days old or newer.
+        </p>
+        <div style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+          {activitySearch.length >= 3
+            ? `Showing ${hotFiltered.length} of ${hotUsers.length} hot`
+            : `${hotUsers.length} hot user${hotUsers.length === 1 ? '' : 's'}`}
+        </div>
+        {hotFiltered.length > 0 ? (
+          <>
+            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Contact</th>
+                    <th>Longest streak (days)</th>
+                    <th>Last activity</th>
+                    <th>Messages</th>
+                    <th>Reactions given</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hotPaged.map((u, index) => (
+                    <tr key={u.from_id}>
+                      <td style={{ color: '#8b98a5' }}>{(hotPage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td>
+                        {u.display_name || u.from_id}
+                        {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
+                      </td>
+                      <td>{u.longest_streak_days ?? 0}</td>
+                      <td>{u.last_activity ? new Date(u.last_activity).toLocaleDateString('en-US') : '—'}</td>
+                      <td>{u.messages_sent}</td>
+                      <td>{u.reactions_given}</td>
+                      <td>
+                        <a href={`/users/${encodeURIComponent(u.from_id)}`}>View profile</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={hotPage}
+              totalItems={hotSorted.length}
+              onPageChange={setHotPage}
+              itemLabel="hot users"
+            />
+          </>
+        ) : (
+          <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3 ? 'No hot users match your search.' : 'No hot users for this range (no one with a 5+ day streak and activity in the last 5 days).'}
+          </p>
+        )}
       </div>
 
       <div className="card">

@@ -94,6 +94,26 @@ export async function getUsersSummaryData(
       WHERE m.from_id IS NOT NULL ${chatCondM}
       GROUP BY r.reactor_from_id, m.from_id
       ORDER BY r.reactor_from_id, COUNT(*) DESC
+    ),
+    distinct_days AS (
+      SELECT u.uid AS from_id, (u.date)::date AS d
+      FROM unified u
+      GROUP BY u.uid, (u.date)::date
+    ),
+    with_grp AS (
+      SELECT from_id, d,
+        d - (ROW_NUMBER() OVER (PARTITION BY from_id ORDER BY d)::int) AS grp
+      FROM distinct_days
+    ),
+    streak_lengths AS (
+      SELECT from_id, grp, COUNT(*)::int AS streak_len
+      FROM with_grp
+      GROUP BY from_id, grp
+    ),
+    longest_streak AS (
+      SELECT from_id, MAX(streak_len)::int AS longest_streak_days
+      FROM streak_lengths
+      GROUP BY from_id
     )
     SELECT
       u.from_id,
@@ -116,6 +136,7 @@ export async function getUsersSummaryData(
       ma.first_activity,
       ma.last_activity,
       COALESCE(ma.active_days, 0)::int AS active_days,
+      COALESCE(ls.longest_streak_days, 0)::int AS longest_streak_days,
       CASE WHEN (COALESCE(ma.messages_sent, 0) + COALESCE(ma.service_messages, 0)) > 0
         THEN ROUND(COALESCE(rr.reactions_received, 0)::numeric / (COALESCE(ma.messages_sent, 0) + COALESCE(ma.service_messages, 0)), 2)
         ELSE 0 END AS reactions_ratio,
@@ -125,6 +146,7 @@ export async function getUsersSummaryData(
     LEFT JOIN reactions_received rr ON rr.from_id = u.from_id
     LEFT JOIN reactions_given rg ON rg.from_id = u.from_id
     LEFT JOIN top_reacted tr ON tr.from_id = u.from_id
+    LEFT JOIN longest_streak ls ON ls.from_id = u.from_id
     ORDER BY (COALESCE(ma.messages_sent, 0) + COALESCE(ma.service_messages, 0)) DESC NULLS LAST, u.display_name ASC NULLS LAST
   `;
 
