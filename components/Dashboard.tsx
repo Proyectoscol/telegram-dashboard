@@ -124,7 +124,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month'>('day');
-  const [quickRange, setQuickRange] = useState<QuickRange>('all');
+  const [quickRange, setQuickRange] = useState<QuickRange>('3m');
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [fromId, setFromId] = useState<string>('');
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
@@ -536,18 +536,18 @@ export function Dashboard() {
             Go to contact
           </a>
         ) : null}
-        {(groupBy !== 'day' || quickRange !== 'all' || fromId !== '' || selectedChatIds.length !== chats.length || chats.some((c) => !selectedChatIds.includes(c.id))) && (
+        {(groupBy !== 'day' || quickRange !== '3m' || fromId !== '' || selectedChatIds.length !== chats.length || chats.some((c) => !selectedChatIds.includes(c.id))) && (
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => {
               setGroupBy('day');
-              setQuickRange('all');
+              setQuickRange('3m');
               setSelectedChatIds(chats.map((c) => c.id));
               setFromId('');
             }}
             style={{ marginLeft: '0.5rem', padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
-            title="Reset Group by, Range, Chats (all on), and Contact to defaults"
+            title="Reset to: Day, 3 months, all chats, all contacts"
           >
             Reset filters
           </button>

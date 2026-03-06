@@ -47,26 +47,16 @@ export function ChatSelector({
       <div style={{ marginBottom: compact ? '0' : '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{label}</span>
-          <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.75rem' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-              onClick={() => onChange(chats.map((c) => c.id))}
-            >
-              Select all
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-              onClick={() => onChange([])}
-            >
-              Deselect all
-            </button>
-          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+            onClick={() => onChange(chats.map((c) => c.id))}
+          >
+            Select all
+          </button>
         </div>
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.5rem' }}>
           {chats.map((c) => {
             const isOn = selectedIds.includes(c.id);
             return (
