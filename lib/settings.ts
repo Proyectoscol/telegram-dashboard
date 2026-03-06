@@ -3,7 +3,7 @@
  * Never expose raw keys to the client.
  */
 
-import { pool } from '@/lib/db/client';
+import { pool, queryWithRetry } from '@/lib/db/client';
 import { log } from '@/lib/logger';
 
 export const SETTING_OPENAI_API_KEY = 'openai_api_key';
@@ -214,6 +214,7 @@ export async function getPersonaLabels(): Promise<Record<string, string>> {
 // don't hit the DB on every request. TTLs are intentionally short so settings changes
 // propagate within a minute.
 let _cacheTtlCache: { value: number; expiresAt: number } | null = null;
+let _cacheTtlPromise: Promise<number> | null = null;
 let _personaPromptsCache: { value: { systemPrompt: string; userPromptTemplate: string }; expiresAt: number } | null = null;
 let _dayInsightPromptsCache: { value: { systemPrompt: string; userPromptTemplate: string }; expiresAt: number } | null = null;
 let _listLimitsCache: { value: { aiUsage: number; messagesPage: number; periodDetail: number }; expiresAt: number } | null = null;
@@ -225,15 +226,25 @@ export async function getCacheTtlStatsMinutes(): Promise<number> {
     log.db(`[DBG-01a8b2 H6] getCacheTtlStatsMinutes cache hit value=${_cacheTtlCache.value}`);
     return _cacheTtlCache.value;
   }
+  if (_cacheTtlPromise) {
+    log.db('[DBG-01a8b2 H6] getCacheTtlStatsMinutes join inflight refresh');
+    return _cacheTtlPromise;
+  }
   log.db('[DBG-01a8b2 H6] getCacheTtlStatsMinutes cache miss');
-  const { rows } = await pool.query<{ value: string }>(
-    'SELECT value FROM settings WHERE key = $1',
-    [SETTING_CACHE_TTL_STATS_MINUTES]
-  );
-  const raw = rows.length === 0 ? 2 : parseInt(rows[0].value, 10);
-  const value = Number.isNaN(raw) ? 2 : Math.max(1, Math.min(60, raw));
-  _cacheTtlCache = { value, expiresAt: Date.now() + 60_000 };
-  return value;
+  _cacheTtlPromise = (async () => {
+    const { rows } = await queryWithRetry<{ value: string }>(
+      'SELECT value FROM settings WHERE key = $1',
+      [SETTING_CACHE_TTL_STATS_MINUTES]
+    );
+    const raw = rows.length === 0 ? 2 : parseInt(rows[0].value, 10);
+    const value = Number.isNaN(raw) ? 2 : Math.max(1, Math.min(60, raw));
+    _cacheTtlCache = { value, expiresAt: Date.now() + 60_000 };
+    log.db(`[DBG-01a8b2 H6] getCacheTtlStatsMinutes refresh done value=${value}`);
+    return value;
+  })().finally(() => {
+    _cacheTtlPromise = null;
+  });
+  return _cacheTtlPromise;
 }
 
 /** Ingest: slug for the main chat (e.g. "main"). Deprecated: ingest now uses per-chat slug. */
