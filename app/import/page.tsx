@@ -46,6 +46,18 @@ export default function ImportPage() {
   const [membersError, setMembersError] = useState<string | null>(null);
   const membersInputRef = useRef<HTMLInputElement>(null);
 
+  const [membersPremiumFile, setMembersPremiumFile] = useState<File | null>(null);
+  const [membersPremiumLoading, setMembersPremiumLoading] = useState(false);
+  const [membersPremiumResult, setMembersPremiumResult] = useState<{
+    updated: number;
+    total: number;
+    durationMs?: number;
+    errors?: string[];
+    errorCount?: number;
+  } | null>(null);
+  const [membersPremiumError, setMembersPremiumError] = useState<string | null>(null);
+  const membersPremiumInputRef = useRef<HTMLInputElement>(null);
+
   const [photosZipFile, setPhotosZipFile] = useState<File | null>(null);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [photosResult, setPhotosResult] = useState<{
@@ -143,6 +155,34 @@ export default function ImportPage() {
     }
   };
 
+  const handleMembersPremiumSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!membersPremiumFile) {
+      setMembersPremiumError('Please select a file.');
+      return;
+    }
+    setMembersPremiumError(null);
+    setMembersPremiumResult(null);
+    setMembersPremiumLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', membersPremiumFile);
+      const res = await fetch('/api/import/members-premium', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      setMembersPremiumResult(data);
+      setMembersPremiumFile(null);
+      if (membersPremiumInputRef.current) membersPremiumInputRef.current.value = '';
+    } catch (err) {
+      setMembersPremiumError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setMembersPremiumLoading(false);
+    }
+  };
+
   const handlePhotosZipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!photosZipFile) {
@@ -175,7 +215,7 @@ export default function ImportPage() {
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP with JSON files and profile_photos folder), and <strong>Group members</strong> (weekly member snapshot).
+        <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP), <strong>Group members</strong> (weekly snapshot), and <strong>Group Members Premium</strong> (weekly snapshot to set is_premium).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
@@ -290,6 +330,61 @@ export default function ImportPage() {
               </span>
             ) : (
               'Upload and update members'
+            )}
+          </button>
+        </form>
+      </section>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Group Members Premium (weekly snapshot)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Upload the same <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>members.csv</code> format from the <strong>Premium group</strong>. Users that match by user ID are marked as premium (<strong>is_premium = true</strong>, <strong>premium_since</strong> set if not already). Only existing users are updated; no new users are created.
+        </p>
+        <form onSubmit={handleMembersPremiumSubmit}>
+          <div className="upload-zone">
+            <label className="form-group">
+              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select Premium members CSV</span>
+              <input
+                ref={membersPremiumInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => setMembersPremiumFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <p>{membersPremiumFile ? membersPremiumFile.name : 'No file selected'}</p>
+          </div>
+          {membersPremiumError && <div className="alert alert-error">{membersPremiumError}</div>}
+          {membersPremiumResult && (
+            <>
+              <div className="alert alert-success">
+                Premium members import complete. Users marked as premium: <strong>{membersPremiumResult.updated}</strong>, total rows in file: <strong>{membersPremiumResult.total}</strong>.
+              </div>
+              {membersPremiumResult.errorCount != null && membersPremiumResult.errorCount > 0 && (
+                <div className="alert" style={{ background: 'rgba(255, 165, 0, 0.15)', border: '1px solid #f90', color: '#f90' }}>
+                  {membersPremiumResult.errorCount} row(s) had parse errors.
+                  {membersPremiumResult.errors && membersPremiumResult.errors.length > 0 && (
+                    <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                      <summary>First errors</summary>
+                      <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                        {membersPremiumResult.errors.slice(0, 10).map((e, i) => (
+                          <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
+                        ))}
+                        {membersPremiumResult.errors.length > 10 && <li>… and {membersPremiumResult.errors.length - 10} more</li>}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          <button type="submit" className="btn" disabled={!membersPremiumFile || membersPremiumLoading}>
+            {membersPremiumLoading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Uploading…
+              </span>
+            ) : (
+              'Upload and update premium members'
             )}
           </button>
         </form>
