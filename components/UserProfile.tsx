@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
 import { LoadingCard, LoadingSpinner } from '@/components/Loading';
@@ -63,6 +63,37 @@ interface UserDetail {
 interface TimeSeries {
   period: string;
   count: number;
+}
+
+type QuickRange = '1w' | '1m' | '3m' | '6m' | '1y' | '2y' | 'all';
+const QUICK_RANGE_OPTIONS: { value: QuickRange; label: string }[] = [
+  { value: '1w', label: 'Week' },
+  { value: '1m', label: 'Month' },
+  { value: '3m', label: '3 months' },
+  { value: '6m', label: '6 months' },
+  { value: '1y', label: '1 year' },
+  { value: '2y', label: '2 years' },
+  { value: 'all', label: 'Indefinitely' },
+];
+
+function quickRangeBounds(range: QuickRange): { start: string | null; end: string | null } {
+  if (range === 'all') return { start: null, end: null };
+  const now = new Date();
+  const start = new Date(now);
+  if (range === '1w') start.setUTCDate(start.getUTCDate() - 7);
+  else if (range === '1m') start.setUTCMonth(start.getUTCMonth() - 1);
+  else if (range === '3m') start.setUTCMonth(start.getUTCMonth() - 3);
+  else if (range === '6m') start.setUTCMonth(start.getUTCMonth() - 6);
+  else if (range === '1y') start.setUTCFullYear(start.getUTCFullYear() - 1);
+  else if (range === '2y') start.setUTCFullYear(start.getUTCFullYear() - 2);
+  return { start: start.toISOString(), end: now.toISOString() };
+}
+
+interface ChatSeries {
+  chatId: number;
+  chatName: string;
+  slug: string;
+  data: { period: string; count: number }[];
 }
 
 interface PeriodDetail {
@@ -140,7 +171,14 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   });
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const [profileChatIds, setProfileChatIds] = useState<number[]>(() => initialChatIds ?? []);
-  const [modalPoint, setModalPoint] = useState<{ period: string; periodLabel: string; count: number; type: 'messages' | 'reactions' } | null>(null);
+  const [quickRange, setQuickRange] = useState<QuickRange>('3m');
+  const [overview, setOverview] = useState<{
+    messagesOverTimeByChat?: ChatSeries[];
+    reactionsOverTimeByChat?: ChatSeries[];
+    messagesOverTime?: { period: string; count: number }[];
+    reactionsOverTime?: { period: string; count: number }[];
+  } | null>(null);
+  const [modalPoint, setModalPoint] = useState<{ period: string; periodLabel: string; count: number; type: 'messages' | 'reactions'; chatId?: number; chatName?: string } | null>(null);
   const [periodDetail, setPeriodDetail] = useState<PeriodDetail | null>(null);
   const [periodReactionsDetail, setPeriodReactionsDetail] = useState<PeriodReactionsDetail | null>(null);
   const [periodDetailLoading, setPeriodDetailLoading] = useState(false);
@@ -154,6 +192,23 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   const [_reactionsGiven, _setReactionsGiven] = useState<{ chatId: number; chatName: string | null; chatSlug: string | null; receiverFromId: string; receiverName: string | null; count: number }[] | null>(null);
 
   const fromId = fromIdProp ?? (user?.from_id ?? null);
+  const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
+  const start = range.start;
+  const end = range.end;
+
+  const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#ff9500', '#7856ff', '#00d4aa', '#e6007a', '#ffd400', '#0891b2', '#22c55e', '#a855f7'];
+  const chatIdToColor = useMemo(() => {
+    const sorted = [...chats].sort((a, b) => Number(a.id) - Number(b.id));
+    const map = new Map<number, string>();
+    sorted.forEach((c, i) => map.set(Number(c.id), CHAT_COLORS[i % CHAT_COLORS.length]));
+    return (chatId: number) => {
+      const id = Number(chatId);
+      const fromMap = map.get(id);
+      if (fromMap) return fromMap;
+      const hash = Math.abs((id * 2654435761) >>> 0);
+      return CHAT_COLORS[hash % CHAT_COLORS.length];
+    };
+  }, [chats]);
 
   const periodBounds = (period: string, g: 'day' | 'week' | 'month') => {
     const start = new Date(period);
@@ -166,7 +221,6 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
 
   // Single aggregated fetch: user + KPI stats + time series + chats + labels
   // + recentMessages + reactionsGiven in one request.
-  // AbortController cancels in-flight requests on fast navigation (back/forward).
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -175,6 +229,8 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       ? `/api/users/by-id/${byId}/full`
       : `/api/users/${encodeURIComponent(fromIdProp!)}/full`;
     const params = new URLSearchParams({ groupBy });
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
     profileChatIds.forEach((id) => params.append('chatId', String(id)));
     fetch(`${base}?${params}`, { signal: controller.signal })
       .then((r) => {
@@ -184,11 +240,13 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       .then((data) => {
         setUser(data.user ?? null);
         setTimeSeries(data.timeSeries ?? null);
-        if (Array.isArray(data.chats)) setChats(data.chats);
+        if (Array.isArray(data.chats)) {
+          setChats(data.chats);
+          setProfileChatIds((prev) => (prev.length === 0 && data.chats.length > 0 && !initialChatIds?.length ? data.chats.map((c: { id: number }) => c.id) : prev));
+        }
         if (data.labels && typeof data.labels === 'object') {
           setPersonaLabels((prev) => ({ ...prev, ...data.labels }));
         }
-        // Seed sub-components from the aggregated payload so they don't fetch separately
         if (Array.isArray(data.recentMessages)) _setRecentMsgs(data.recentMessages);
         if (Array.isArray(data.reactionsGiven)) _setReactionsGiven(data.reactionsGiven);
       })
@@ -198,7 +256,34 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [byId, fromIdProp, profileChatIds, groupBy]);
+  }, [byId, fromIdProp, profileChatIds, groupBy, start, end]);
+
+  // Overview for by-chat charts (messages/reactions over time per chat)
+  useEffect(() => {
+    if (!fromId) {
+      setOverview(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const params = new URLSearchParams({ groupBy, byChat: '1' });
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    params.set('fromId', fromId);
+    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    fetch(`/api/stats/overview?${params}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) return;
+        setOverview({
+          messagesOverTimeByChat: data.messagesOverTimeByChat ?? [],
+          reactionsOverTimeByChat: data.reactionsOverTimeByChat ?? [],
+          messagesOverTime: data.messagesOverTime ?? [],
+          reactionsOverTime: data.reactionsOverTime ?? [],
+        });
+      })
+      .catch(() => setOverview(null));
+    return () => ctrl.abort();
+  }, [fromId, groupBy, start, end, profileChatIds]);
 
   useEffect(() => {
     if (!modalPoint || modalPoint.type !== 'messages') {
@@ -206,10 +291,11 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       return;
     }
     const ctrl = new AbortController();
-    const { start, end } = periodBounds(modalPoint.period, groupBy);
+    const { start: ps, end: pe } = periodBounds(modalPoint.period, groupBy);
     setPeriodDetailLoading(true);
-    const params = new URLSearchParams({ start, end });
-    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    const params = new URLSearchParams({ start: ps, end: pe });
+    const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : profileChatIds;
+    chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
     const fid = user?.from_id ?? null;
     if (fid) params.set('fromId', fid);
     fetch(`/api/stats/period-detail?${params}`, { signal: ctrl.signal })
@@ -226,10 +312,11 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
       return;
     }
     const ctrl = new AbortController();
-    const { start, end } = periodBounds(modalPoint.period, groupBy);
+    const { start: ps, end: pe } = periodBounds(modalPoint.period, groupBy);
     setPeriodReactionsLoading(true);
-    const params = new URLSearchParams({ start, end });
-    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    const params = new URLSearchParams({ start: ps, end: pe });
+    const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : profileChatIds;
+    chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
     const fid = user?.from_id ?? null;
     if (fid) params.set('fromId', fid);
     fetch(`/api/stats/period-reactions?${params}`, { signal: ctrl.signal })
@@ -248,10 +335,11 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
     }
     const ctrl = new AbortController();
     setDayInsightError(null);
-    const { start, end } = periodBounds(modalPoint.period, groupBy);
+    const { start: ps, end: pe } = periodBounds(modalPoint.period, groupBy);
     setDayInsightLoading(true);
-    const params = new URLSearchParams({ start, end });
-    profileChatIds.forEach((id) => params.append('chatId', String(id)));
+    const params = new URLSearchParams({ start: ps, end: pe });
+    const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : profileChatIds;
+    chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
     const fid = user?.from_id ?? null;
     if (fid) params.set('fromId', fid);
     fetch(`/api/stats/day-insight?${params}`, { signal: ctrl.signal })
@@ -367,14 +455,52 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
   if (error) return <div className="alert alert-error">{error}</div>;
   if (!user) return <div className="card">User not found.</div>;
 
-  const messagesData = (timeSeries?.messagesOverTime ?? []).map((p) => ({
+  const byChatMessages = overview?.messagesOverTimeByChat ?? [];
+  const byChatReactions = overview?.reactionsOverTimeByChat ?? [];
+  const messagesData = (overview?.messagesOverTime ?? timeSeries?.messagesOverTime ?? []).map((p) => ({
     ...p,
     periodLabel: formatPeriod(p.period),
   }));
-  const reactionsData = (timeSeries?.reactionsOverTime ?? []).map((p) => ({
+  const reactionsData = (overview?.reactionsOverTime ?? timeSeries?.reactionsOverTime ?? []).map((p) => ({
     ...p,
     periodLabel: formatPeriod(p.period),
   }));
+  const messagesChartData =
+    byChatMessages.length > 0
+      ? (() => {
+          const periods = new Set<string>(messagesData.map((d) => d.period));
+          return Array.from(periods)
+            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+            .map((period) => {
+              const row: Record<string, string | number> = { period, periodLabel: formatPeriod(period) };
+              let total = 0;
+              byChatMessages.forEach((c) => {
+                const pt = c.data.find((d) => d.period === period);
+                const count = pt?.count ?? 0;
+                row[c.slug] = count;
+                total += count;
+              });
+              row.count = total;
+              return row;
+            });
+        })()
+      : messagesData;
+  const reactionsChartData =
+    byChatReactions.length > 0
+      ? (() => {
+          const periods = new Set<string>(reactionsData.map((d) => d.period));
+          return Array.from(periods)
+            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+            .map((period) => {
+              const row: Record<string, string | number> = { period, periodLabel: formatPeriod(period) };
+              byChatReactions.forEach((c) => {
+                const pt = c.data.find((d) => d.period === period);
+                row[c.slug] = pt?.count ?? 0;
+              });
+              return row;
+            });
+        })()
+      : reactionsData;
 
   const usedCallNumbers = user.calls.map((c) => c.call_number);
 
@@ -389,15 +515,52 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
 
       {chats.length > 0 && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <ChatSelector
-            chats={chats}
-            selectedIds={profileChatIds}
-            onChange={setProfileChatIds}
-            label="Filter by chat"
-            allChatsLabel="All chats"
-            onlyTheseLabel="Show only these chats:"
-            hint="Applies to stats, charts, messages and reactions on this page."
-          />
+          <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
+            <label>
+              Group by
+              <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'day' | 'week' | 'month')}>
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.8125rem', color: '#8b98a5' }}>Range</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {QUICK_RANGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setQuickRange(opt.value)}
+                    className={`btn ${quickRange === opt.value ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ChatSelector
+              chats={chats}
+              selectedIds={profileChatIds}
+              onChange={setProfileChatIds}
+              label="Chats"
+              variant="toggles"
+              compact
+            />
+            {(quickRange !== '3m' || profileChatIds.length !== chats.length) && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => { setQuickRange('3m'); setProfileChatIds(chats.map((c) => c.id)); }}
+                style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+                title="Reset to 3 months, all chats"
+              >
+                Reset filters
+              </button>
+            )}
+          </div>
+          <p style={{ color: '#8b98a5', fontSize: '0.8125rem', margin: 0 }}>Applies to stats, charts, messages and reactions on this page.</p>
         </div>
       )}
 
@@ -605,111 +768,182 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         </p>
       )}
 
-      <div className="filters">
-        <label>
-          Group by
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'day' | 'week' | 'month')}>
-            <option value="day">Day</option>
-            <option value="week">Week</option>
-            <option value="month">Month</option>
-          </select>
-        </label>
-      </div>
-
       <div className="card">
         <h2>Messages over time (this user)</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-          Click a point to see messages for that day.
+          Click a point to see messages for that period. All dates in range are shown.
         </p>
         <div className="chart-container">
-          {messagesData.length > 0 ? (
+          {messagesChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={messagesData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <AreaChart data={messagesChartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2f3336" />
                 <XAxis dataKey="periodLabel" stroke="#8b98a5" fontSize={12} />
                 <YAxis stroke="#8b98a5" fontSize={12} />
                 <Tooltip
                   contentStyle={{ background: '#16181c', border: '1px solid #2f3336', borderRadius: 8 }}
+                  labelStyle={{ color: '#e7e9ea' }}
                   formatter={(value: number) => [value, 'Messages']}
+                  labelFormatter={(label) => label}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  stroke="#1d9bf0"
-                  fill="#1d9bf0"
-                  fillOpacity={0.3}
-                  dot={{ r: 4, cursor: 'pointer' }}
-                  activeDot={{
-                    r: 6,
-                    cursor: 'pointer',
-                    onClick: (_e: unknown, payload: unknown) => {
-                      const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload
-                        ?? (payload as { period?: string; periodLabel?: string; count?: number });
-                      if (p?.period != null) setModalPoint({
-                        period: p.period,
-                        periodLabel: p.periodLabel ?? formatPeriod(p.period),
-                        count: p.count ?? 0,
-                        type: 'messages',
-                      });
-                    },
-                  }}
-                />
+                {byChatMessages.length > 0 ? (
+                  byChatMessages.map((c) => (
+                    <Area
+                      key={c.chatId}
+                      type="monotone"
+                      dataKey={c.slug}
+                      name={c.chatName}
+                      stroke={chatIdToColor(c.chatId)}
+                      fill={chatIdToColor(c.chatId)}
+                      fillOpacity={0.3}
+                      dot={{ r: 5, cursor: 'pointer' }}
+                      activeDot={{
+                        r: 12,
+                        cursor: 'pointer',
+                        onClick: (_e: unknown, payload: unknown) => {
+                          const p = (payload as { payload?: Record<string, unknown> })?.payload ?? (payload as Record<string, unknown>);
+                          if (p?.period != null) setModalPoint({
+                            period: p.period as string,
+                            periodLabel: (p.periodLabel as string) ?? formatPeriod(p.period as string),
+                            count: Number(p.count) ?? 0,
+                            type: 'messages',
+                            chatId: c.chatId,
+                            chatName: c.chatName,
+                          });
+                        },
+                      }}
+                    />
+                  ))
+                ) : (
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#1d9bf0"
+                    fill="#1d9bf0"
+                    fillOpacity={0.3}
+                    dot={{ r: 5, cursor: 'pointer' }}
+                    activeDot={{
+                      r: 12,
+                      cursor: 'pointer',
+                      onClick: (_e: unknown, payload: unknown) => {
+                        const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload ?? (payload as { period?: string; periodLabel?: string; count?: number });
+                        if (p?.period != null) setModalPoint({
+                          period: p.period,
+                          periodLabel: p.periodLabel ?? formatPeriod(p.period),
+                          count: p.count ?? 0,
+                          type: 'messages',
+                        });
+                      },
+                    }}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8b98a5' }}>
-              No message data.
+              No message data for this range.
             </div>
           )}
         </div>
+        {byChatMessages.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #2f3336', fontSize: '0.8125rem', color: '#8b98a5' }}>
+            {byChatMessages.map((c) => (
+              <span key={c.chatId} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ width: 12, height: 12, borderRadius: 2, background: chatIdToColor(c.chatId), flexShrink: 0 }} aria-hidden />
+                <span style={{ color: '#e7e9ea' }}>{c.chatName}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">
         <h2>Reactions over time (this user)</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
-          Click a point to see reactions for that day.
+          Click a point to see reactions for that period. All dates in range are shown.
         </p>
         <div className="chart-container">
-          {reactionsData.length > 0 ? (
+          {reactionsChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={reactionsData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <AreaChart data={reactionsChartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2f3336" />
                 <XAxis dataKey="periodLabel" stroke="#8b98a5" fontSize={12} />
                 <YAxis stroke="#8b98a5" fontSize={12} />
                 <Tooltip
                   contentStyle={{ background: '#16181c', border: '1px solid #2f3336', borderRadius: 8 }}
+                  labelStyle={{ color: '#e7e9ea' }}
                   formatter={(value: number) => [value, 'Reactions']}
+                  labelFormatter={(label) => label}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  stroke="#00ba7c"
-                  fill="#00ba7c"
-                  fillOpacity={0.3}
-                  dot={{ r: 4, cursor: 'pointer' }}
-                  activeDot={{
-                    r: 6,
-                    cursor: 'pointer',
-                    onClick: (_e: unknown, payload: unknown) => {
-                      const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload
-                        ?? (payload as { period?: string; periodLabel?: string; count?: number });
-                      if (p?.period != null) setModalPoint({
-                        period: p.period,
-                        periodLabel: p.periodLabel ?? formatPeriod(p.period),
-                        count: p.count ?? 0,
-                        type: 'reactions',
-                      });
-                    },
-                  }}
-                />
+                {byChatReactions.length > 0 ? (
+                  byChatReactions.map((c) => (
+                    <Area
+                      key={c.chatId}
+                      type="monotone"
+                      dataKey={c.slug}
+                      name={c.chatName}
+                      stroke={chatIdToColor(c.chatId)}
+                      fill={chatIdToColor(c.chatId)}
+                      fillOpacity={0.3}
+                      dot={{ r: 5, cursor: 'pointer' }}
+                      activeDot={{
+                        r: 12,
+                        cursor: 'pointer',
+                        onClick: (_e: unknown, payload: unknown) => {
+                          const p = (payload as { payload?: Record<string, unknown> })?.payload ?? (payload as Record<string, unknown>);
+                          if (p?.period != null) setModalPoint({
+                            period: p.period as string,
+                            periodLabel: (p.periodLabel as string) ?? formatPeriod(p.period as string),
+                            count: Number(p.count) ?? 0,
+                            type: 'reactions',
+                            chatId: c.chatId,
+                            chatName: c.chatName,
+                          });
+                        },
+                      }}
+                    />
+                  ))
+                ) : (
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#00ba7c"
+                    fill="#00ba7c"
+                    fillOpacity={0.3}
+                    dot={{ r: 5, cursor: 'pointer' }}
+                    activeDot={{
+                      r: 12,
+                      cursor: 'pointer',
+                      onClick: (_e: unknown, payload: unknown) => {
+                        const p = (payload as { payload?: { period?: string; periodLabel?: string; count?: number } })?.payload ?? (payload as { period?: string; periodLabel?: string; count?: number });
+                        if (p?.period != null) setModalPoint({
+                          period: p.period,
+                          periodLabel: p.periodLabel ?? formatPeriod(p.period),
+                          count: p.count ?? 0,
+                          type: 'reactions',
+                        });
+                      },
+                    }}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8b98a5' }}>
-              No reaction data.
+              No reaction data for this range.
             </div>
           )}
         </div>
+        {byChatReactions.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #2f3336', fontSize: '0.8125rem', color: '#8b98a5' }}>
+            {byChatReactions.map((c) => (
+              <span key={c.chatId} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ width: 12, height: 12, borderRadius: 2, background: chatIdToColor(c.chatId), flexShrink: 0 }} aria-hidden />
+                <span style={{ color: '#e7e9ea' }}>{c.chatName}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">
@@ -842,12 +1076,17 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         <div className="modal-backdrop" onClick={() => setModalPoint(null)} role="presentation">
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{modalPoint.type === 'reactions' ? 'Reactions' : 'Messages'}: {modalPoint.periodLabel}</h3>
+              <h3>{modalPoint.type === 'reactions' ? 'Reactions' : 'Messages'}: {modalPoint.periodLabel}{modalPoint.chatName ? ` — ${modalPoint.chatName}` : ''}</h3>
               <button type="button" className="modal-close" onClick={() => setModalPoint(null)} aria-label="Close">
                 ×
               </button>
             </div>
             <div className="modal-body">
+              {modalPoint.chatName && (
+                <p style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: '#8b98a5' }}>
+                  Chat: <strong style={{ color: '#e7e9ea' }}>{modalPoint.chatName}</strong>
+                </p>
+              )}
               {modalPoint.type === 'messages' ? (
                 periodDetailLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b98a5' }}>
@@ -896,9 +1135,10 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                               setDayInsightError(null);
                               setDayInsightGenerating(true);
                               try {
-                                const { start, end } = periodBounds(modalPoint.period, groupBy);
-                                const params = new URLSearchParams({ start, end });
-                                profileChatIds.forEach((id) => params.append('chatId', String(id)));
+                                const { start: ps, end: pe } = periodBounds(modalPoint.period, groupBy);
+                                const params = new URLSearchParams({ start: ps, end: pe });
+                                const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : profileChatIds;
+                                chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
                                 const fid = user?.from_id ?? null;
                                 if (fid) params.set('fromId', fid);
                                 const res = await fetch(`/api/stats/day-insight?${params}`, { method: 'POST' });
@@ -1001,9 +1241,10 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
                               setDayInsightError(null);
                               setDayInsightGenerating(true);
                               try {
-                                const { start, end } = periodBounds(modalPoint.period, groupBy);
-                                const params = new URLSearchParams({ start, end });
-                                profileChatIds.forEach((id) => params.append('chatId', String(id)));
+                                const { start: ps, end: pe } = periodBounds(modalPoint.period, groupBy);
+                                const params = new URLSearchParams({ start: ps, end: pe });
+                                const chatIdsToUse = modalPoint.chatId != null ? [modalPoint.chatId] : profileChatIds;
+                                chatIdsToUse.forEach((id) => params.append('chatId', String(id)));
                                 const fid = user?.from_id ?? null;
                                 if (fid) params.set('fromId', fid);
                                 const res = await fetch(`/api/stats/day-insight?${params}`, { method: 'POST' });

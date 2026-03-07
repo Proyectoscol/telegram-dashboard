@@ -65,7 +65,9 @@ function normalizePeriodKey(period: string | Date, groupBy: GroupBy): string {
 export async function getUserTimeSeries(
   fromId: string,
   chatIds: number[] | null,
-  groupBy: GroupBy
+  groupBy: GroupBy,
+  start?: string | null,
+  end?: string | null
 ) {
   const periodExpr =
     groupBy === 'month'
@@ -79,6 +81,14 @@ export async function getUserTimeSeries(
   if (chatIds && chatIds.length > 0) {
     mParams.push(chatIds);
     mConds.push(`m.chat_id = ANY($${mParams.length}::bigint[])`);
+  }
+  if (start) {
+    mParams.push(start);
+    mConds.push(`m.date >= $${mParams.length}::timestamptz`);
+  }
+  if (end) {
+    mParams.push(end);
+    mConds.push(`m.date <= $${mParams.length}::timestamptz`);
   }
   const mWhere = mConds.join(' AND ');
   const rangeWhere = mWhere.replace(/m\./g, '');
@@ -122,6 +132,14 @@ export async function getUserTimeSeries(
   if (chatIds && chatIds.length > 0) {
     rParams.push(chatIds);
     rConds.push(`r.chat_id = ANY($${rParams.length}::bigint[])`);
+  }
+  if (start) {
+    rParams.push(start);
+    rConds.push(`r.reacted_at >= $${rParams.length}::timestamptz`);
+  }
+  if (end) {
+    rParams.push(end);
+    rConds.push(`r.reacted_at <= $${rParams.length}::timestamptz`);
   }
   const rWhere = rConds.join(' AND ');
   const rRangeWhere = rWhere.replace(/r\./g, '');
