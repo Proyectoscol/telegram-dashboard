@@ -1187,7 +1187,7 @@ export function Dashboard() {
                           : { background: '#2f3336', color: '#8b98a5' }
                       }
                     >
-                      {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                      {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in'}
                     </span>
                   </td>
                   <td>
@@ -1321,7 +1321,7 @@ export function Dashboard() {
                               : { background: '#2f3336', color: '#8b98a5' }
                           }
                         >
-                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in'}
                         </span>
                       </td>
                       <td>
@@ -1447,7 +1447,7 @@ export function Dashboard() {
                                 : { background: '#2f3336', color: '#8b98a5' }
                             }
                           >
-                            {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                            {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in'}
                           </span>
                         </td>
                         <td>
@@ -1555,7 +1555,7 @@ export function Dashboard() {
                               : { background: '#2f3336', color: '#8b98a5' }
                           }
                         >
-                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in'}
                         </span>
                       </td>
                       <td>
@@ -1660,7 +1660,7 @@ export function Dashboard() {
                               : { background: '#2f3336', color: '#8b98a5' }
                           }
                         >
-                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in'}
                         </span>
                       </td>
                       <td>
