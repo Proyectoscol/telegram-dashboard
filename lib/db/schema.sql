@@ -75,7 +75,14 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'telegram_last_seen') THEN
     ALTER TABLE users ADD COLUMN telegram_last_seen TIMESTAMPTZ;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'is_current_member') THEN
+    ALTER TABLE users ADD COLUMN is_current_member BOOLEAN DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'member_since') THEN
+    ALTER TABLE users ADD COLUMN member_since TIMESTAMPTZ;
+  END IF;
 END $$;
+CREATE INDEX IF NOT EXISTS idx_users_current_member ON users(is_current_member) WHERE is_current_member = TRUE;
 
 CREATE TABLE IF NOT EXISTS messages (
   id SERIAL PRIMARY KEY,

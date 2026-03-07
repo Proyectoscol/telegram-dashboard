@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
           GROUP BY m.from_id
         )
         SELECT u.id, u.from_id, u.display_name, u.username, u.is_premium, u.assigned_to, u.notes,
+               COALESCE(u.is_current_member, FALSE) AS is_current_member,
                la.last_date AS last_activity,
                COALESCE(cc.call_count, 0) AS call_count,
                cc.last_call AS last_call_at,
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN reactions_given rg ON rg.from_id = u.from_id
         LEFT JOIN contact_personas cp ON cp.user_id = u.id
         WHERE ${where}
-        ORDER BY la.last_date DESC NULLS LAST, u.display_name
+        ORDER BY COALESCE(u.is_current_member, FALSE) DESC, la.last_date DESC NULLS LAST, u.display_name
       `;
       const { rows: fetchedRows } = await queryWithRetry(query, params);
       // #region agent log

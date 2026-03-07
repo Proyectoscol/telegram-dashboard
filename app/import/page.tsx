@@ -33,6 +33,19 @@ export default function ImportPage() {
   const [userError, setUserError] = useState<string | null>(null);
   const userInputRef = useRef<HTMLInputElement>(null);
 
+  const [membersFile, setMembersFile] = useState<File | null>(null);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersResult, setMembersResult] = useState<{
+    added: number;
+    updated: number;
+    total: number;
+    groupId?: string | null;
+    errors?: string[];
+    errorCount?: number;
+  } | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  const membersInputRef = useRef<HTMLInputElement>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -89,11 +102,39 @@ export default function ImportPage() {
     }
   };
 
+  const handleMembersSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!membersFile) {
+      setMembersError('Please select a file.');
+      return;
+    }
+    setMembersError(null);
+    setMembersResult(null);
+    setMembersLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', membersFile);
+      const res = await fetch('/api/import/members', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      setMembersResult(data);
+      setMembersFile(null);
+      if (membersInputRef.current) membersInputRef.current.value = '';
+    } catch (err) {
+      setMembersError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
   return (
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        Two import types: <strong>Chat export</strong> (messages and reactions) and <strong>User info</strong> (profile data to update contacts).
+        Three import types: <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), and <strong>Group members</strong> (weekly member snapshot to track who is still in the group).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
@@ -152,6 +193,62 @@ export default function ImportPage() {
               </span>
             ) : (
               'Upload and import'
+            )}
+          </button>
+        </form>
+      </section>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>Group members (weekly snapshot)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Upload the <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>members.csv</code> from the Telegram scraper weekly. Expected columns: <code>username</code>, <code>user id</code>, <code>name</code>, <code>group id</code>. All users previously in the group are marked as former members; only those in this file are marked as active members (<strong>is_current_member = true</strong>).
+        </p>
+        <form onSubmit={handleMembersSubmit}>
+          <div className="upload-zone">
+            <label className="form-group">
+              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select members CSV</span>
+              <input
+                ref={membersInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => setMembersFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <p>{membersFile ? membersFile.name : 'No file selected'}</p>
+          </div>
+          {membersError && <div className="alert alert-error">{membersError}</div>}
+          {membersResult && (
+            <>
+              <div className="alert alert-success">
+                Members import complete. New members added: <strong>{membersResult.added}</strong>, existing updated: <strong>{membersResult.updated}</strong>, total processed: <strong>{membersResult.total}</strong>.
+                {membersResult.groupId && <span> Group ID: {membersResult.groupId}.</span>}
+              </div>
+              {membersResult.errorCount != null && membersResult.errorCount > 0 && (
+                <div className="alert" style={{ background: 'rgba(255, 165, 0, 0.15)', border: '1px solid #f90', color: '#f90' }}>
+                  {membersResult.errorCount} row(s) had errors.
+                  {membersResult.errors && membersResult.errors.length > 0 && (
+                    <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                      <summary>First errors</summary>
+                      <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                        {membersResult.errors.slice(0, 10).map((e, i) => (
+                          <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
+                        ))}
+                        {membersResult.errors.length > 10 && <li>… and {membersResult.errors.length - 10} more</li>}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          <button type="submit" className="btn" disabled={!membersFile || membersLoading}>
+            {membersLoading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Uploading…
+              </span>
+            ) : (
+              'Upload and update members'
             )}
           </button>
         </form>

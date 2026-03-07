@@ -11,6 +11,7 @@ interface UserRow {
   display_name: string | null;
   username: string | null;
   is_premium: boolean;
+  is_current_member: boolean;
   assigned_to: string | null;
   notes: string | null;
   last_activity: string | null;
@@ -30,7 +31,7 @@ export default function ContactsPage() {
   const [selectedChatIds, setSelectedChatIds] = useState<number[]>([]);
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const [contactsSearch, setContactsSearch] = useState('');
-  type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'assigned_to' | 'last_activity' | 'call_count' | 'last_call_at' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'has_persona';
+  type ContactsSortKey = 'display_name' | 'username' | 'from_id' | 'is_premium' | 'is_current_member' | 'assigned_to' | 'last_activity' | 'call_count' | 'last_call_at' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'has_persona';
   const [contactsSortBy, setContactsSortBy] = useState<ContactsSortKey>('last_activity');
   const [contactsSortDir, setContactsSortDir] = useState<'asc' | 'desc'>('desc');
   const [contactsPage, setContactsPage] = useState(1);
@@ -87,7 +88,7 @@ export default function ContactsPage() {
     if (key === 'last_activity' || key === 'last_call_at') {
       va = va ? new Date(va as string).getTime() : 0;
       vb = vb ? new Date(vb as string).getTime() : 0;
-    } else if (key === 'is_premium' || key === 'has_persona') {
+    } else if (key === 'is_premium' || key === 'has_persona' || key === 'is_current_member') {
       va = va ? 1 : 0;
       vb = vb ? 1 : 0;
     } else if (key === 'display_name' || key === 'username' || key === 'from_id' || key === 'assigned_to') {
@@ -176,6 +177,7 @@ export default function ContactsPage() {
               <tr>
                 <th className="th-index">#</th>
                 {([
+                  { key: 'is_current_member' as const, label: 'Member' },
                   { key: 'display_name' as const, label: 'Name' },
                   { key: 'username' as const, label: 'Username' },
                   { key: 'from_id' as const, label: 'User ID' },
@@ -224,6 +226,11 @@ export default function ContactsPage() {
                   onClick={() => window.location.assign(profileHref(u))}
                 >
                   <td style={{ color: '#8b98a5' }}>{(contactsPage - 1) * PAGE_SIZE + index + 1}</td>
+                  <td>
+                    <span className={u.is_current_member ? 'badge badge-success' : 'badge badge-default'}>
+                      {u.is_current_member ? 'Member' : 'Former'}
+                    </span>
+                  </td>
                   <td>
                     <a
                       href={profileHref(u)}

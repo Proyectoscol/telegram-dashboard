@@ -120,6 +120,7 @@ export async function getUsersSummaryData(
       u.display_name,
       u.username,
       u.is_premium,
+      COALESCE(u.is_current_member, FALSE) AS is_current_member,
       COALESCE(ma.messages_sent, 0)::int AS messages_sent,
       COALESCE(ma.service_messages, 0)::int AS service_messages,
       (COALESCE(ma.messages_sent, 0) + COALESCE(ma.service_messages, 0))::int AS total_activity,
@@ -147,7 +148,7 @@ export async function getUsersSummaryData(
     LEFT JOIN reactions_given rg ON rg.from_id = u.from_id
     LEFT JOIN top_reacted tr ON tr.from_id = u.from_id
     LEFT JOIN longest_streak ls ON ls.from_id = u.from_id
-    ORDER BY (COALESCE(ma.messages_sent, 0) + COALESCE(ma.service_messages, 0)) DESC NULLS LAST, u.display_name ASC NULLS LAST
+    ORDER BY COALESCE(u.is_current_member, FALSE) DESC, (COALESCE(ma.messages_sent, 0) + COALESCE(ma.service_messages, 0)) DESC NULLS LAST, u.display_name ASC NULLS LAST
   `;
 
   const summaryResult = await queryWithRetry(summaryQuery, params);

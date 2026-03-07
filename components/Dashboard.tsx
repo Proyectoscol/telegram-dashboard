@@ -147,6 +147,7 @@ export function Dashboard() {
       display_name: string | null;
       username?: string | null;
       is_premium: boolean;
+      is_current_member: boolean;
       messages_sent: number;
       service_messages: number;
       total_activity: number;
@@ -179,20 +180,20 @@ export function Dashboard() {
   const [dayInsightGenerating, setDayInsightGenerating] = useState(false);
   const [dayInsightError, setDayInsightError] = useState<string | null>(null);
   const [activitySearch, setActivitySearch] = useState('');
-  type ActivitySortKey = 'display_name' | 'is_premium' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'photos' | 'videos' | 'files' | 'audios' | 'messages_edited' | 'replies' | 'total_words' | 'total_chars' | 'first_activity' | 'last_activity' | 'active_days' | 'reactions_ratio' | 'top_reacted_to_name';
+  type ActivitySortKey = 'display_name' | 'is_premium' | 'is_current_member' | 'messages_sent' | 'reactions_received' | 'reactions_given' | 'photos' | 'videos' | 'files' | 'audios' | 'messages_edited' | 'replies' | 'total_words' | 'total_chars' | 'first_activity' | 'last_activity' | 'active_days' | 'reactions_ratio' | 'top_reacted_to_name';
   const [activitySortBy, setActivitySortBy] = useState<ActivitySortKey>('messages_sent');
   const [activitySortDir, setActivitySortDir] = useState<'asc' | 'desc'>('desc');
   const [activityPage, setActivityPage] = useState(1);
   const [inactivePage, setInactivePage] = useState(1);
   const [atRiskPage, setAtRiskPage] = useState(1);
   const [hotPage, setHotPage] = useState(1);
-  type HotSortKey = 'display_name' | 'longest_streak_days' | 'last_activity' | 'messages_sent' | 'reactions_given';
+  type HotSortKey = 'display_name' | 'is_current_member' | 'longest_streak_days' | 'last_activity' | 'messages_sent' | 'reactions_given';
   const [hotSortBy, setHotSortBy] = useState<HotSortKey>('longest_streak_days');
   const [hotSortDir, setHotSortDir] = useState<'asc' | 'desc'>('desc');
-  type AtRiskSortKey = 'display_name' | 'last_activity' | 'messages_sent' | 'reactions_given';
+  type AtRiskSortKey = 'display_name' | 'is_current_member' | 'last_activity' | 'messages_sent' | 'reactions_given';
   const [atRiskSortBy, setAtRiskSortBy] = useState<AtRiskSortKey>('last_activity');
   const [atRiskSortDir, setAtRiskSortDir] = useState<'asc' | 'desc'>('asc');
-  type InactiveSortKey = 'display_name' | 'is_premium' | 'messages_sent' | 'reactions_given';
+  type InactiveSortKey = 'display_name' | 'is_premium' | 'is_current_member' | 'messages_sent' | 'reactions_given';
   const [inactiveSortBy, setInactiveSortBy] = useState<InactiveSortKey>('display_name');
   const [inactiveSortDir, setInactiveSortDir] = useState<'asc' | 'desc'>('asc');
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
@@ -405,6 +406,11 @@ export function Dashboard() {
       const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
       return atRiskSortDir === 'asc' ? ta - tb : tb - ta;
     }
+    if (key === 'is_current_member') {
+      const va = (a as Record<string, unknown>).is_current_member ? 1 : 0;
+      const vb = (b as Record<string, unknown>).is_current_member ? 1 : 0;
+      return atRiskSortDir === 'asc' ? va - vb : vb - va;
+    }
     const va = Number((a as Record<string, unknown>)[key]) ?? 0;
     const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
     const n = va - vb;
@@ -437,6 +443,11 @@ export function Dashboard() {
       const tb = b.last_activity ? new Date(b.last_activity).getTime() : 0;
       return hotSortDir === 'asc' ? ta - tb : tb - ta;
     }
+    if (key === 'is_current_member') {
+      const va = (a as Record<string, unknown>).is_current_member ? 1 : 0;
+      const vb = (b as Record<string, unknown>).is_current_member ? 1 : 0;
+      return hotSortDir === 'asc' ? va - vb : vb - va;
+    }
     const va = Number((a as Record<string, unknown>)[key]) ?? 0;
     const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
     const n = va - vb;
@@ -456,7 +467,7 @@ export function Dashboard() {
     }
     let va: unknown = (a as Record<string, unknown>)[key];
     let vb: unknown = (b as Record<string, unknown>)[key];
-    if (key === 'is_premium') {
+    if (key === 'is_premium' || key === 'is_current_member') {
       va = va ? 1 : 0;
       vb = vb ? 1 : 0;
     } else if (key === 'first_activity' || key === 'last_activity') {
@@ -479,9 +490,9 @@ export function Dashboard() {
       const n = va.localeCompare(vb, undefined, { sensitivity: 'base' });
       return inactiveSortDir === 'asc' ? n : -n;
     }
-    if (key === 'is_premium') {
-      const va = (a as Record<string, unknown>).is_premium ? 1 : 0;
-      const vb = (b as Record<string, unknown>).is_premium ? 1 : 0;
+    if (key === 'is_premium' || key === 'is_current_member') {
+      const va = (a as Record<string, unknown>)[key] ? 1 : 0;
+      const vb = (b as Record<string, unknown>)[key] ? 1 : 0;
       const n = va - vb;
       return inactiveSortDir === 'asc' ? n : -n;
     }
@@ -1004,6 +1015,7 @@ export function Dashboard() {
               <tr>
                 <th className="th-index">#</th>
                 {([
+                  { key: 'is_current_member' as const, label: 'Member' },
                   { key: 'display_name' as const, label: 'Contact' },
                   { key: 'is_premium' as const, label: 'Premium' },
                   { key: 'messages_sent' as const, label: 'Messages' },
@@ -1058,6 +1070,11 @@ export function Dashboard() {
                   onClick={() => window.location.assign(`/users/${encodeURIComponent(u.from_id)}`)}
                 >
                   <td style={{ color: '#8b98a5' }}>{(activityPage - 1) * PAGE_SIZE + index + 1}</td>
+                  <td>
+                    <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
+                      {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                    </span>
+                  </td>
                   <td>
                     <a
                       href={`/users/${encodeURIComponent(u.from_id)}`}
@@ -1146,6 +1163,7 @@ export function Dashboard() {
                   <tr>
                     <th className="th-index">#</th>
                     {([
+                      { key: 'is_current_member' as const, label: 'Member' },
                       { key: 'display_name' as const, label: 'Contact' },
                       { key: 'longest_streak_days' as const, label: 'Longest streak (days)' },
                       { key: 'last_activity' as const, label: 'Last activity' },
@@ -1171,6 +1189,11 @@ export function Dashboard() {
                   {hotPaged.map((u, index) => (
                     <tr key={u.from_id}>
                       <td style={{ color: '#8b98a5' }}>{(hotPage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td>
+                        <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
+                          {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                        </span>
+                      </td>
                       <td>
                         {u.display_name || u.from_id}
                         {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
@@ -1233,6 +1256,7 @@ export function Dashboard() {
                   <tr>
                     <th className="th-index">#</th>
                     {[
+                      { key: 'is_current_member' as const, label: 'Member' },
                       { key: 'display_name' as const, label: 'Contact' },
                       { key: 'last_activity' as const, label: 'Last activity' },
                     ].map(({ key, label }) => (
@@ -1275,6 +1299,11 @@ export function Dashboard() {
                     return (
                       <tr key={u.from_id}>
                         <td style={{ color: '#8b98a5' }}>{(atRiskPage - 1) * PAGE_SIZE + index + 1}</td>
+                        <td>
+                          <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
+                            {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                          </span>
+                        </td>
                         <td>
                           {u.display_name || u.from_id}
                           {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
@@ -1338,6 +1367,7 @@ export function Dashboard() {
                   <tr>
                     <th className="th-index">#</th>
                     {([
+                      { key: 'is_current_member' as const, label: 'Member' },
                       { key: 'display_name' as const, label: 'Contact' },
                       { key: 'is_premium' as const, label: 'Premium' },
                       { key: 'messages_sent' as const, label: 'Messages' },
@@ -1362,6 +1392,11 @@ export function Dashboard() {
                   {inactivePaged.map((u, index) => (
                     <tr key={u.from_id}>
                       <td style={{ color: '#8b98a5' }}>{(inactivePage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td>
+                        <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
+                          {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                        </span>
+                      </td>
                       <td>
                         {u.display_name || u.from_id}
                         {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}

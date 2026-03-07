@@ -346,6 +346,17 @@ td a:hover {
   color: #8b98a5;
 }
 
+.badge-success {
+  background: rgba(0, 186, 124, 0.15);
+  color: #00ba7c;
+  border: 1px solid rgba(0, 186, 124, 0.35);
+}
+
+.badge-muted {
+  background: #2f3336;
+  color: #536471;
+}
+
 .form-group {
   margin-bottom: 1rem;
 }
