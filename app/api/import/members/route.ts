@@ -57,7 +57,7 @@ function parseMembersCSV(text: string): { rows: MemberRow[]; groupId: bigint | n
     }
 
     const parsedUserId = BigInt(rawUserId);
-    if (parsedUserId === 0n) {
+    if (parsedUserId === BigInt(0)) {
       if (errors.length < 20) errors.push(`Line ${i + 1}: invalid user id "${rawUserId}"`);
       continue;
     }
