@@ -243,10 +243,10 @@ export function Dashboard() {
   const [inactivePage, setInactivePage] = useState(1);
   const [atRiskPage, setAtRiskPage] = useState(1);
   const [hotPage, setHotPage] = useState(1);
-  type HotSortKey = 'display_name' | 'is_current_member' | 'longest_streak_days' | 'last_activity' | 'messages_sent' | 'reactions_given';
+  type HotSortKey = 'display_name' | 'is_current_member' | 'is_premium' | 'longest_streak_days' | 'last_activity' | 'messages_sent' | 'reactions_given';
   const [hotSortBy, setHotSortBy] = useState<HotSortKey>('longest_streak_days');
   const [hotSortDir, setHotSortDir] = useState<'asc' | 'desc'>('desc');
-  type AtRiskSortKey = 'display_name' | 'is_current_member' | 'last_activity' | 'messages_sent' | 'reactions_given';
+  type AtRiskSortKey = 'display_name' | 'is_current_member' | 'is_premium' | 'last_activity' | 'messages_sent' | 'reactions_given';
   const [atRiskSortBy, setAtRiskSortBy] = useState<AtRiskSortKey>('last_activity');
   const [atRiskSortDir, setAtRiskSortDir] = useState<'asc' | 'desc'>('asc');
   type InactiveSortKey = 'display_name' | 'is_premium' | 'is_current_member' | 'messages_sent' | 'reactions_given';
@@ -473,6 +473,11 @@ export function Dashboard() {
       const vb = (b as Record<string, unknown>).is_current_member ? 1 : 0;
       return atRiskSortDir === 'asc' ? va - vb : vb - va;
     }
+    if (key === 'is_premium') {
+      const va = (a as Record<string, unknown>).is_premium ? 1 : 0;
+      const vb = (b as Record<string, unknown>).is_premium ? 1 : 0;
+      return atRiskSortDir === 'asc' ? va - vb : vb - va;
+    }
     const va = Number((a as Record<string, unknown>)[key]) ?? 0;
     const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
     const n = va - vb;
@@ -508,6 +513,11 @@ export function Dashboard() {
     if (key === 'is_current_member') {
       const va = (a as Record<string, unknown>).is_current_member ? 1 : 0;
       const vb = (b as Record<string, unknown>).is_current_member ? 1 : 0;
+      return hotSortDir === 'asc' ? va - vb : vb - va;
+    }
+    if (key === 'is_premium') {
+      const va = (a as Record<string, unknown>).is_premium ? 1 : 0;
+      const vb = (b as Record<string, unknown>).is_premium ? 1 : 0;
       return hotSortDir === 'asc' ? va - vb : vb - va;
     }
     const va = Number((a as Record<string, unknown>)[key]) ?? 0;
@@ -1109,8 +1119,8 @@ export function Dashboard() {
                 <th className="th-index">#</th>
                 {([
                   { key: 'is_current_member' as const, label: 'Member' },
-                  { key: 'display_name' as const, label: 'Contact' },
                   { key: 'is_premium' as const, label: 'Premium' },
+                  { key: 'display_name' as const, label: 'Contact' },
                   { key: 'messages_sent' as const, label: 'Messages' },
                   { key: 'reactions_received' as const, label: 'Reactions rec.' },
                   { key: 'reactions_given' as const, label: 'Reactions given' },
@@ -1169,6 +1179,18 @@ export function Dashboard() {
                     </span>
                   </td>
                   <td>
+                    <span
+                      className="badge"
+                      style={
+                        (u as Record<string, unknown>).is_premium
+                          ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+                          : { background: '#2f3336', color: '#8b98a5' }
+                      }
+                    >
+                      {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                    </span>
+                  </td>
+                  <td>
                     <a
                       href={`/users/${encodeURIComponent(u.from_id)}`}
                       onClick={(e) => e.stopPropagation()}
@@ -1180,7 +1202,6 @@ export function Dashboard() {
                     </a>
                     {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
                   </td>
-                  <td>{u.is_premium ? 'Yes' : 'No'}</td>
                   <td>{u.messages_sent}</td>
                   <td>{u.reactions_received}</td>
                   <td>{u.reactions_given}</td>
@@ -1260,6 +1281,7 @@ export function Dashboard() {
                     <th className="th-index">#</th>
                     {([
                       { key: 'is_current_member' as const, label: 'Member' },
+                      { key: 'is_premium' as const, label: 'Premium' },
                       { key: 'display_name' as const, label: 'Contact' },
                       { key: 'longest_streak_days' as const, label: 'Longest streak (days)' },
                       { key: 'last_activity' as const, label: 'Last activity' },
@@ -1288,6 +1310,18 @@ export function Dashboard() {
                       <td>
                         <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
                           {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className="badge"
+                          style={
+                            (u as Record<string, unknown>).is_premium
+                              ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+                              : { background: '#2f3336', color: '#8b98a5' }
+                          }
+                        >
+                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
                         </span>
                       </td>
                       <td>
@@ -1356,6 +1390,7 @@ export function Dashboard() {
                     <th className="th-index">#</th>
                     {[
                       { key: 'is_current_member' as const, label: 'Member' },
+                      { key: 'is_premium' as const, label: 'Premium' },
                       { key: 'display_name' as const, label: 'Contact' },
                       { key: 'last_activity' as const, label: 'Last activity' },
                     ].map(({ key, label }) => (
@@ -1401,6 +1436,18 @@ export function Dashboard() {
                         <td>
                           <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
                             {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className="badge"
+                            style={
+                              (u as Record<string, unknown>).is_premium
+                                ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+                                : { background: '#2f3336', color: '#8b98a5' }
+                            }
+                          >
+                            {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
                           </span>
                         </td>
                         <td>
@@ -1470,8 +1517,8 @@ export function Dashboard() {
                     <th className="th-index">#</th>
                     {([
                       { key: 'is_current_member' as const, label: 'Member' },
-                      { key: 'display_name' as const, label: 'Contact' },
                       { key: 'is_premium' as const, label: 'Premium' },
+                      { key: 'display_name' as const, label: 'Contact' },
                       { key: 'messages_sent' as const, label: 'Messages' },
                       { key: 'reactions_given' as const, label: 'Reactions given' },
                     ] as { key: InactiveSortKey; label: string }[]).map(({ key, label }) => (
@@ -1500,10 +1547,21 @@ export function Dashboard() {
                         </span>
                       </td>
                       <td>
+                        <span
+                          className="badge"
+                          style={
+                            (u as Record<string, unknown>).is_premium
+                              ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+                              : { background: '#2f3336', color: '#8b98a5' }
+                          }
+                        >
+                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                        </span>
+                      </td>
+                      <td>
                         {u.display_name || u.from_id}
                         {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
                       </td>
-                      <td>{u.is_premium ? 'Yes' : 'No'}</td>
                       <td>{u.messages_sent}</td>
                       <td>{u.reactions_given}</td>
                       <td>
@@ -1564,8 +1622,8 @@ export function Dashboard() {
                     <th className="th-index">#</th>
                     {([
                       { key: 'is_current_member' as const, label: 'Member' },
-                      { key: 'display_name' as const, label: 'Contact' },
                       { key: 'is_premium' as const, label: 'Premium' },
+                      { key: 'display_name' as const, label: 'Contact' },
                       { key: 'messages_sent' as const, label: 'Messages' },
                       { key: 'reactions_given' as const, label: 'Reactions given' },
                     ] as { key: InactiveSortKey; label: string }[]).map(({ key, label }) => (
@@ -1594,10 +1652,21 @@ export function Dashboard() {
                         </span>
                       </td>
                       <td>
+                        <span
+                          className="badge"
+                          style={
+                            (u as Record<string, unknown>).is_premium
+                              ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+                              : { background: '#2f3336', color: '#8b98a5' }
+                          }
+                        >
+                          {(u as Record<string, unknown>).is_premium ? 'Premium' : 'Not in Premium'}
+                        </span>
+                      </td>
+                      <td>
                         {u.display_name || u.from_id}
                         {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
                       </td>
-                      <td>{u.is_premium ? 'Yes' : 'No'}</td>
                       <td>{u.messages_sent}</td>
                       <td>{u.reactions_given}</td>
                       <td>

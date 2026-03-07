@@ -193,10 +193,10 @@ export default function ContactsPage() {
                 <th style={{ width: 48, textAlign: 'center' }} aria-label="Photo" />
                 {([
                   { key: 'is_current_member' as const, label: 'Member' },
+                  { key: 'is_premium' as const, label: 'Premium' },
                   { key: 'display_name' as const, label: 'Name' },
                   { key: 'username' as const, label: 'Username' },
                   { key: 'from_id' as const, label: 'User ID' },
-                  { key: 'is_premium' as const, label: 'Premium' },
                   { key: 'messages_sent' as const, label: 'Messages' },
                   { key: 'reactions_received' as const, label: 'Reactions rec.' },
                   { key: 'reactions_given' as const, label: 'Reactions given' },
@@ -273,8 +273,20 @@ export default function ContactsPage() {
                     )}
                   </td>
                   <td>
-                    <span className={u.is_current_member ? 'badge badge-success' : 'badge badge-default'}>
+                    <span className={u.is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
                       {u.is_current_member ? 'Member' : 'Former'}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className="badge"
+                      style={
+                        u.is_premium
+                          ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+                          : { background: '#2f3336', color: '#8b98a5' }
+                      }
+                    >
+                      {u.is_premium ? 'Premium' : 'Not in Premium'}
                     </span>
                   </td>
                   <td>
@@ -304,11 +316,6 @@ export default function ContactsPage() {
                     )}
                   </td>
                   <td><code style={{ fontSize: '0.8rem' }}>{u.from_id ?? '—'}</code></td>
-                  <td>
-                    <span className={u.is_premium ? 'badge badge-premium' : 'badge badge-default'}>
-                      {u.is_premium ? 'Yes' : 'No'}
-                    </span>
-                  </td>
                   <td>{u.messages_sent ?? 0}</td>
                   <td>{u.reactions_received ?? 0}</td>
                   <td>{u.reactions_given ?? 0}</td>

@@ -515,6 +515,16 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         <span className={user.is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
           {user.is_current_member ? 'Member' : 'Former'}
         </span>
+        <span
+          className="badge"
+          style={
+            user.is_premium
+              ? { background: 'rgba(255, 193, 7, 0.2)', color: '#e6a800', border: '1px solid rgba(230, 168, 0, 0.5)' }
+              : { background: '#2f3336', color: '#8b98a5' }
+          }
+        >
+          {user.is_premium ? 'Premium' : 'Not premium'}
+        </span>
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
