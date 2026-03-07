@@ -252,8 +252,11 @@ export function Dashboard() {
   type InactiveSortKey = 'display_name' | 'is_premium' | 'is_current_member' | 'messages_sent' | 'reactions_given';
   const [inactiveSortBy, setInactiveSortBy] = useState<InactiveSortKey>('display_name');
   const [inactiveSortDir, setInactiveSortDir] = useState<'asc' | 'desc'>('asc');
-  type ExportSource = 'activity' | 'hot' | 'atRisk' | 'inactive';
+  type ExportSource = 'activity' | 'hot' | 'atRisk' | 'inactive' | 'moreInactive';
   const [exportSource, setExportSource] = useState<ExportSource | null>(null);
+  const [moreInactivePage, setMoreInactivePage] = useState(1);
+  const [moreInactiveSortBy, setMoreInactiveSortBy] = useState<InactiveSortKey>('display_name');
+  const [moreInactiveSortDir, setMoreInactiveSortDir] = useState<'asc' | 'desc'>('asc');
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
   const start = range.start;
   const end = range.end;
@@ -438,6 +441,7 @@ export function Dashboard() {
   const inScopeUsers = usersSummary.filter((u) => !fromId || u.from_id === fromId);
   const activeUsers = inScopeUsers.filter((u) => Number(u.messages_sent) > 0 || Number(u.reactions_given) > 0);
   const inactiveUsers = inScopeUsers.filter((u) => Number(u.messages_sent) === 0 && Number(u.reactions_given) === 0);
+  const moreInactiveUsers = inScopeUsers.filter((u) => Number(u.messages_sent) === 0);
 
   const sevenDaysAgo = (() => {
     const d = new Date();
@@ -560,6 +564,28 @@ export function Dashboard() {
     return inactiveSortDir === 'asc' ? n : -n;
   });
   const inactivePaged = inactiveSorted.slice((inactivePage - 1) * PAGE_SIZE, inactivePage * PAGE_SIZE);
+
+  const moreInactiveFiltered = moreInactiveUsers.filter(matchesActivitySearch);
+  const moreInactiveSorted = [...moreInactiveFiltered].sort((a, b) => {
+    const key = moreInactiveSortBy;
+    if (key === 'display_name') {
+      const va = String(a.display_name ?? a.from_id).trim();
+      const vb = String(b.display_name ?? b.from_id).trim();
+      const n = va.localeCompare(vb, undefined, { sensitivity: 'base' });
+      return moreInactiveSortDir === 'asc' ? n : -n;
+    }
+    if (key === 'is_premium' || key === 'is_current_member') {
+      const va = (a as Record<string, unknown>)[key] ? 1 : 0;
+      const vb = (b as Record<string, unknown>)[key] ? 1 : 0;
+      const n = va - vb;
+      return moreInactiveSortDir === 'asc' ? n : -n;
+    }
+    const va = Number((a as Record<string, unknown>)[key]) ?? 0;
+    const vb = Number((b as Record<string, unknown>)[key]) ?? 0;
+    const n = va - vb;
+    return moreInactiveSortDir === 'asc' ? n : -n;
+  });
+  const moreInactivePaged = moreInactiveSorted.slice((moreInactivePage - 1) * PAGE_SIZE, moreInactivePage * PAGE_SIZE);
 
   return (
     <>
@@ -1409,9 +1435,9 @@ export function Dashboard() {
       </div>
 
       <div className="card">
-        <h2>Inactive users</h2>
+        <h2>Inactive users (0 messages and 0 reactions)</h2>
         <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-          Contacts with 0 messages and 0 reactions given in the selected range.
+          Contacts with zero messages and zero reactions given in the selected range.
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
           <span style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
@@ -1497,7 +1523,101 @@ export function Dashboard() {
           </>
         ) : (
           <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
-            {activitySearch.length >= 3 ? 'No inactive users match your search.' : 'No inactive users for this range.'}
+            {activitySearch.length >= 3 ? 'No inactive users match your search.' : 'No inactive users for this range (0 messages and 0 reactions).'}
+          </p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>More Inactive Users (0 messages only)</h2>
+        <p style={{ color: '#8b98a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+          Contacts with zero messages in the selected range (they may have given reactions).
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+          <span style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3
+              ? `Showing ${moreInactiveFiltered.length} of ${moreInactiveUsers.length}`
+              : `${moreInactiveUsers.length} contact${moreInactiveUsers.length === 1 ? '' : 's'} with 0 messages`}
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name, username, or user ID (min 3 characters)"
+            value={activitySearch}
+            onChange={(e) => setActivitySearch(e.target.value)}
+            style={{ maxWidth: 320, padding: '0.4rem 0.75rem', borderRadius: 6, border: '1px solid #2f3336', background: '#16181c', color: '#e7e9ea' }}
+          />
+          {(moreInactiveSortBy !== 'display_name' || moreInactiveSortDir !== 'asc') && (
+            <button type="button" className="btn btn-secondary" onClick={() => { setMoreInactiveSortBy('display_name'); setMoreInactiveSortDir('asc'); setMoreInactivePage(1); }} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Reset sort to default">
+              Reset sort
+            </button>
+          )}
+          <button type="button" className="btn btn-secondary" onClick={() => setExportSource('moreInactive')} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Export to CSV">
+            Export CSV
+          </button>
+        </div>
+        {moreInactiveFiltered.length > 0 ? (
+          <>
+            <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th className="th-index">#</th>
+                    {([
+                      { key: 'is_current_member' as const, label: 'Member' },
+                      { key: 'display_name' as const, label: 'Contact' },
+                      { key: 'is_premium' as const, label: 'Premium' },
+                      { key: 'messages_sent' as const, label: 'Messages' },
+                      { key: 'reactions_given' as const, label: 'Reactions given' },
+                    ] as { key: InactiveSortKey; label: string }[]).map(({ key, label }) => (
+                      <th key={key} className="sortable-th">
+                        <span className="sortable-th-label">{label}</span>
+                        <span className="sortable-th-arrows">
+                          <button type="button" className={`sort-arrow ${moreInactiveSortBy === key && moreInactiveSortDir === 'asc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setMoreInactiveSortBy(key); setMoreInactiveSortDir('asc'); setMoreInactivePage(1); }} aria-label={`Sort by ${label} ascending`} title="Sort ascending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 2L2 6h6L5 2z"/></svg>
+                          </button>
+                          <button type="button" className={`sort-arrow ${moreInactiveSortBy === key && moreInactiveSortDir === 'desc' ? 'sort-arrow-active' : ''}`} onClick={(e) => { e.stopPropagation(); setMoreInactiveSortBy(key); setMoreInactiveSortDir('desc'); setMoreInactivePage(1); }} aria-label={`Sort by ${label} descending`} title="Sort descending">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden><path d="M5 8L2 4h6L5 8z"/></svg>
+                          </button>
+                        </span>
+                      </th>
+                    ))}
+                    <th className="th-action"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moreInactivePaged.map((u, index) => (
+                    <tr key={u.from_id}>
+                      <td style={{ color: '#8b98a5' }}>{(moreInactivePage - 1) * PAGE_SIZE + index + 1}</td>
+                      <td>
+                        <span className={(u as Record<string, unknown>).is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
+                          {(u as Record<string, unknown>).is_current_member ? 'Member' : 'Former'}
+                        </span>
+                      </td>
+                      <td>
+                        {u.display_name || u.from_id}
+                        {u.username ? <span style={{ color: '#8b98a5', fontSize: '0.8125rem', marginLeft: '0.35rem' }}>@{u.username}</span> : null}
+                      </td>
+                      <td>{u.is_premium ? 'Yes' : 'No'}</td>
+                      <td>{u.messages_sent}</td>
+                      <td>{u.reactions_given}</td>
+                      <td>
+                        <a href={`/users/${encodeURIComponent(u.from_id)}`}>View profile</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={moreInactivePage}
+              totalItems={moreInactiveSorted.length}
+              onPageChange={setMoreInactivePage}
+              itemLabel="contacts (0 messages)"
+            />
+          </>
+        ) : (
+          <p style={{ color: '#8b98a5', fontSize: '0.875rem' }}>
+            {activitySearch.length >= 3 ? 'No contacts match your search.' : 'No contacts with 0 messages in this range.'}
           </p>
         )}
       </div>
@@ -1536,9 +1656,19 @@ export function Dashboard() {
         <ExportCsvModal
           open
           onClose={() => setExportSource(null)}
-          title="Export Inactive users to CSV"
+          title="Export Inactive users (0 messages and 0 reactions) to CSV"
           filenamePrefix="inactive-users"
           rows={inactiveSorted as Record<string, unknown>[]}
+          columns={INACTIVE_EXPORT_COLUMNS}
+        />
+      )}
+      {exportSource === 'moreInactive' && (
+        <ExportCsvModal
+          open
+          onClose={() => setExportSource(null)}
+          title="Export More Inactive Users (0 messages only) to CSV"
+          filenamePrefix="more-inactive-users"
+          rows={moreInactiveSorted as Record<string, unknown>[]}
           columns={INACTIVE_EXPORT_COLUMNS}
         />
       )}
