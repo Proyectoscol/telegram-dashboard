@@ -130,10 +130,16 @@ export function Dashboard() {
   const [chats, setChats] = useState<{ id: number; name: string; slug: string }[]>([]);
   const CHAT_COLORS = ['#00ba7c', '#1d9bf0', '#ff9500', '#7856ff', '#00d4aa', '#e6007a', '#ffd400', '#0891b2', '#22c55e', '#a855f7'];
   const chatIdToColor = useMemo(() => {
-    const sorted = [...chats].sort((a, b) => a.id - b.id);
+    const sorted = [...chats].sort((a, b) => Number(a.id) - Number(b.id));
     const map = new Map<number, string>();
-    sorted.forEach((c, i) => map.set(c.id, CHAT_COLORS[i % CHAT_COLORS.length]));
-    return (chatId: number) => map.get(chatId) ?? CHAT_COLORS[Math.abs(chatId) % CHAT_COLORS.length];
+    sorted.forEach((c, i) => map.set(Number(c.id), CHAT_COLORS[i % CHAT_COLORS.length]));
+    return (chatId: number) => {
+      const id = Number(chatId);
+      const fromMap = map.get(id);
+      if (fromMap) return fromMap;
+      const hash = Math.abs((id * 2654435761) >>> 0);
+      return CHAT_COLORS[hash % CHAT_COLORS.length];
+    };
   }, [chats]);
   const [usersSummary, setUsersSummary] = useState<
     {
