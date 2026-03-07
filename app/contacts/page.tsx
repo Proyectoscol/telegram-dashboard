@@ -21,6 +21,7 @@ interface UserRow {
   reactions_received: number;
   reactions_given: number;
   has_persona?: boolean;
+  profile_photo_urls?: string[] | null;
 }
 
 export default function ContactsPage() {
@@ -110,6 +111,19 @@ export default function ContactsPage() {
     return selectedChatIds.length > 0 ? `${base}?chatIds=${selectedChatIds.join(',')}` : base;
   };
 
+  const avatarUrl = (u: UserRow) => {
+    const urls = u.profile_photo_urls;
+    if (Array.isArray(urls) && urls.length > 0 && typeof urls[0] === 'string') return urls[0];
+    return null;
+  };
+  const initials = (u: UserRow) => {
+    const name = u.display_name?.trim() || u.username?.trim() || '';
+    if (name.length >= 2) return (name.slice(0, 2)).toUpperCase();
+    if (name.length === 1) return name.toUpperCase();
+    const id = u.from_id ?? String(u.id);
+    return id.slice(-2).toUpperCase();
+  };
+
   if (loading) return <LoadingCard message="Loading contacts…" />;
   if (error) return <div className="alert alert-error">{error}</div>;
 
@@ -176,6 +190,7 @@ export default function ContactsPage() {
             <thead>
               <tr>
                 <th className="th-index">#</th>
+                <th style={{ width: 48, textAlign: 'center' }} aria-label="Photo" />
                 {([
                   { key: 'is_current_member' as const, label: 'Member' },
                   { key: 'display_name' as const, label: 'Name' },
@@ -226,6 +241,37 @@ export default function ContactsPage() {
                   onClick={() => window.location.assign(profileHref(u))}
                 >
                   <td style={{ color: '#8b98a5' }}>{(contactsPage - 1) * PAGE_SIZE + index + 1}</td>
+                  <td style={{ verticalAlign: 'middle' }}>
+                    {avatarUrl(u) ? (
+                      <img
+                        src={avatarUrl(u)!}
+                        alt=""
+                        width={40}
+                        height={40}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          background: '#2f3336',
+                          color: '#8b98a5',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                        }}
+                        aria-hidden
+                      >
+                        {initials(u)}
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <span className={u.is_current_member ? 'badge badge-success' : 'badge badge-default'}>
                       {u.is_current_member ? 'Member' : 'Former'}

@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
           GROUP BY m.from_id
         )
         SELECT u.id, u.from_id, u.display_name, u.username, u.is_premium, u.assigned_to, u.notes,
+               u.profile_photo_urls,
                COALESCE(u.is_current_member, FALSE) AS is_current_member,
                la.last_date AS last_activity,
                COALESCE(cc.call_count, 0) AS call_count,

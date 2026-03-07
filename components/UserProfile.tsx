@@ -518,6 +518,45 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
         <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
+      {Array.isArray(user.profile_photo_urls) && user.profile_photo_urls.length > 0 && (
+        <div className="profile-photos-gallery" style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
+            {user.profile_photo_urls.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block',
+                  flexShrink: 0,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  border: '1px solid #2f3336',
+                  lineHeight: 0,
+                }}
+                title="View full size"
+              >
+                <img
+                  src={url}
+                  alt=""
+                  width={i === 0 ? 120 : 72}
+                  height={i === 0 ? 120 : 72}
+                  loading="lazy"
+                  decoding="async"
+                  style={{
+                    width: i === 0 ? 120 : 72,
+                    height: i === 0 ? 120 : 72,
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {chats.length > 0 && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
