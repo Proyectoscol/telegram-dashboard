@@ -35,7 +35,8 @@ export async function GET(
               is_premium, telegram_premium, telegram_verified, telegram_fake, telegram_bot,
               telegram_status_type, telegram_bio, telegram_last_seen,
               assigned_to, notes, created_at, updated_at,
-              COALESCE(is_current_member, FALSE) AS is_current_member FROM users WHERE from_id = $1`,
+              COALESCE(is_current_member, FALSE) AS is_current_member,
+              profile_photo_urls FROM users WHERE from_id = $1`,
       [fromId]
     );
     const user = userRes.rows[0];

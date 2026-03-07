@@ -46,6 +46,19 @@ export default function ImportPage() {
   const [membersError, setMembersError] = useState<string | null>(null);
   const membersInputRef = useRef<HTMLInputElement>(null);
 
+  const [photosZipFile, setPhotosZipFile] = useState<File | null>(null);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [photosResult, setPhotosResult] = useState<{
+    created: number;
+    updated: number;
+    total: number;
+    photosUploaded: number;
+    errors?: string[];
+    errorCount?: number;
+  } | null>(null);
+  const [photosError, setPhotosError] = useState<string | null>(null);
+  const photosInputRef = useRef<HTMLInputElement>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -130,11 +143,39 @@ export default function ImportPage() {
     }
   };
 
+  const handlePhotosZipSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!photosZipFile) {
+      setPhotosError('Please select a ZIP file.');
+      return;
+    }
+    setPhotosError(null);
+    setPhotosResult(null);
+    setPhotosLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', photosZipFile);
+      const res = await fetch('/api/import/user-info-with-photos', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      setPhotosResult(data);
+      setPhotosZipFile(null);
+      if (photosInputRef.current) photosInputRef.current.value = '';
+    } catch (err) {
+      setPhotosError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setPhotosLoading(false);
+    }
+  };
+
   return (
     <div>
       <h1>Import data</h1>
       <p style={{ color: '#8b98a5', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
-        Three import types: <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), and <strong>Group members</strong> (weekly member snapshot to track who is still in the group).
+        <strong>Chat export</strong> (messages and reactions), <strong>User info</strong> (profile data), <strong>User info + profile photos</strong> (ZIP with JSON files and profile_photos folder), and <strong>Group members</strong> (weekly member snapshot).
       </p>
 
       <section className="card" style={{ marginBottom: '1.5rem' }}>
@@ -249,6 +290,61 @@ export default function ImportPage() {
               </span>
             ) : (
               'Upload and update members'
+            )}
+          </button>
+        </form>
+      </section>
+
+      <section className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', fontSize: '1.1rem' }}>User info + profile photos (ZIP)</h2>
+        <p style={{ color: '#8b98a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Upload a <code style={{ background: '#2f3336', padding: '0.2rem 0.4rem', borderRadius: 4 }}>.zip</code> containing one folder of profile images (<code>profile_photos/</code>) and one or more JSON files (same structure as User info, with <code>profile_photos</code> paths). Each JSON can have ~90 users. Images are uploaded to Supabase Storage and URLs saved in the contact.
+        </p>
+        <form onSubmit={handlePhotosZipSubmit}>
+          <div className="upload-zone">
+            <label className="form-group">
+              <span style={{ display: 'block', marginBottom: '0.5rem' }}>Select ZIP file</span>
+              <input
+                ref={photosInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                onChange={(e) => setPhotosZipFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <p>{photosZipFile ? photosZipFile.name : 'No file selected'}</p>
+          </div>
+          {photosError && <div className="alert alert-error">{photosError}</div>}
+          {photosResult && (
+            <>
+              <div className="alert alert-success">
+                User info + photos import complete. Created: <strong>{photosResult.created}</strong>, updated: <strong>{photosResult.updated}</strong>, total: <strong>{photosResult.total}</strong>, profile photos uploaded: <strong>{photosResult.photosUploaded}</strong>.
+              </div>
+              {photosResult.errorCount != null && photosResult.errorCount > 0 && (
+                <div className="alert" style={{ background: 'rgba(255, 165, 0, 0.15)', border: '1px solid #f90', color: '#f90' }}>
+                  {photosResult.errorCount} error(s).
+                  {photosResult.errors && photosResult.errors.length > 0 && (
+                    <details style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+                      <summary>First errors</summary>
+                      <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                        {photosResult.errors.slice(0, 10).map((e, i) => (
+                          <li key={i} style={{ marginBottom: '0.25rem' }}>{e}</li>
+                        ))}
+                        {photosResult.errors.length > 10 && <li>… and {photosResult.errors.length - 10} more</li>}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          <button type="submit" className="btn" disabled={!photosZipFile || photosLoading}>
+            {photosLoading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LoadingSpinner size="sm" />
+                Uploading…
+              </span>
+            ) : (
+              'Upload ZIP and import users + photos'
             )}
           </button>
         </form>

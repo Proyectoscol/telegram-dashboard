@@ -32,6 +32,7 @@ interface UserDetail {
   assigned_to: string | null;
   notes: string | null;
   is_current_member?: boolean;
+  profile_photo_urls?: string[] | null;
   stats: {
     messagesSent: number;
     serviceMessages?: number;
