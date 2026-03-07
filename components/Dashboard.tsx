@@ -13,6 +13,7 @@ import {
   AreaChart,
 } from 'recharts';
 import { ChatSelector } from '@/components/ChatSelector';
+import { ExportCsvModal, type ExportColumn } from '@/components/ExportCsvModal';
 import { LoadingCard, LoadingOverlay, LoadingSpinner } from '@/components/Loading';
 import { Pagination, PAGE_SIZE } from '@/components/Pagination';
 
@@ -77,6 +78,61 @@ const QUICK_RANGE_OPTIONS: Array<{ value: QuickRange; label: string }> = [
   { value: '1y', label: '1 year' },
   { value: '2y', label: '2 years' },
   { value: 'all', label: 'Indefinitely' },
+];
+
+const ACTIVITY_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'from_id', label: 'User ID' },
+  { key: 'username', label: 'Username' },
+  { key: 'display_name', label: 'Contact' },
+  { key: 'is_current_member', label: 'Member' },
+  { key: 'is_premium', label: 'Premium' },
+  { key: 'messages_sent', label: 'Messages' },
+  { key: 'reactions_received', label: 'Reactions rec.' },
+  { key: 'reactions_given', label: 'Reactions given' },
+  { key: 'photos', label: 'Photos' },
+  { key: 'videos', label: 'Videos' },
+  { key: 'files', label: 'Files' },
+  { key: 'audios', label: 'Audios' },
+  { key: 'messages_edited', label: 'Edited' },
+  { key: 'replies', label: 'Replies' },
+  { key: 'total_words', label: 'Words' },
+  { key: 'total_chars', label: 'Chars' },
+  { key: 'first_activity', label: 'First activity' },
+  { key: 'last_activity', label: 'Last activity' },
+  { key: 'active_days', label: 'Active days' },
+  { key: 'reactions_ratio', label: 'React./msg' },
+  { key: 'top_reacted_to_name', label: 'Top reacted to' },
+];
+
+const HOT_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'from_id', label: 'User ID' },
+  { key: 'username', label: 'Username' },
+  { key: 'display_name', label: 'Contact' },
+  { key: 'is_current_member', label: 'Member' },
+  { key: 'longest_streak_days', label: 'Longest streak (days)' },
+  { key: 'last_activity', label: 'Last activity' },
+  { key: 'messages_sent', label: 'Messages' },
+  { key: 'reactions_given', label: 'Reactions given' },
+];
+
+const AT_RISK_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'from_id', label: 'User ID' },
+  { key: 'username', label: 'Username' },
+  { key: 'display_name', label: 'Contact' },
+  { key: 'is_current_member', label: 'Member' },
+  { key: 'last_activity', label: 'Last activity' },
+  { key: 'messages_sent', label: 'Messages' },
+  { key: 'reactions_given', label: 'Reactions given' },
+];
+
+const INACTIVE_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'from_id', label: 'User ID' },
+  { key: 'username', label: 'Username' },
+  { key: 'display_name', label: 'Contact' },
+  { key: 'is_current_member', label: 'Member' },
+  { key: 'is_premium', label: 'Premium' },
+  { key: 'messages_sent', label: 'Messages' },
+  { key: 'reactions_given', label: 'Reactions given' },
 ];
 
 function formatPeriod(period: string | null): string {
@@ -196,6 +252,8 @@ export function Dashboard() {
   type InactiveSortKey = 'display_name' | 'is_premium' | 'is_current_member' | 'messages_sent' | 'reactions_given';
   const [inactiveSortBy, setInactiveSortBy] = useState<InactiveSortKey>('display_name');
   const [inactiveSortDir, setInactiveSortDir] = useState<'asc' | 'desc'>('asc');
+  type ExportSource = 'activity' | 'hot' | 'atRisk' | 'inactive';
+  const [exportSource, setExportSource] = useState<ExportSource | null>(null);
   const range = useMemo(() => quickRangeBounds(quickRange), [quickRange]);
   const start = range.start;
   const end = range.end;
@@ -1008,6 +1066,15 @@ export function Dashboard() {
               Reset sort
             </button>
           )}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setExportSource('activity')}
+            style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+            title="Export to CSV with column and member filter"
+          >
+            Export CSV
+          </button>
         </div>
         <div className="table-wrap paginated-table-wrap" style={{ overflowX: 'auto' }}>
           <table>
@@ -1154,6 +1221,9 @@ export function Dashboard() {
               Reset sort
             </button>
           )}
+          <button type="button" className="btn btn-secondary" onClick={() => setExportSource('hot')} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Export to CSV">
+            Export CSV
+          </button>
         </div>
         {hotFiltered.length > 0 ? (
           <>
@@ -1247,6 +1317,9 @@ export function Dashboard() {
               Reset sort
             </button>
           )}
+          <button type="button" className="btn btn-secondary" onClick={() => setExportSource('atRisk')} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Export to CSV">
+            Export CSV
+          </button>
         </div>
         {atRiskFiltered.length > 0 ? (
           <>
@@ -1358,6 +1431,9 @@ export function Dashboard() {
               Reset sort
             </button>
           )}
+          <button type="button" className="btn btn-secondary" onClick={() => setExportSource('inactive')} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }} title="Export to CSV">
+            Export CSV
+          </button>
         </div>
         {inactiveFiltered.length > 0 ? (
           <>
@@ -1425,6 +1501,47 @@ export function Dashboard() {
           </p>
         )}
       </div>
+
+      {exportSource === 'activity' && (
+        <ExportCsvModal
+          open
+          onClose={() => setExportSource(null)}
+          title="Export Activity by contact to CSV"
+          filenamePrefix="activity-by-contact"
+          rows={activitySorted as Record<string, unknown>[]}
+          columns={ACTIVITY_EXPORT_COLUMNS}
+        />
+      )}
+      {exportSource === 'hot' && (
+        <ExportCsvModal
+          open
+          onClose={() => setExportSource(null)}
+          title="Export Hot Users to CSV"
+          filenamePrefix="hot-users"
+          rows={hotSorted as Record<string, unknown>[]}
+          columns={HOT_EXPORT_COLUMNS}
+        />
+      )}
+      {exportSource === 'atRisk' && (
+        <ExportCsvModal
+          open
+          onClose={() => setExportSource(null)}
+          title="Export At Risk to CSV"
+          filenamePrefix="at-risk"
+          rows={atRiskSorted as Record<string, unknown>[]}
+          columns={AT_RISK_EXPORT_COLUMNS}
+        />
+      )}
+      {exportSource === 'inactive' && (
+        <ExportCsvModal
+          open
+          onClose={() => setExportSource(null)}
+          title="Export Inactive users to CSV"
+          filenamePrefix="inactive-users"
+          rows={inactiveSorted as Record<string, unknown>[]}
+          columns={INACTIVE_EXPORT_COLUMNS}
+        />
+      )}
       </LoadingOverlay>
     </>
   );
