@@ -45,16 +45,8 @@ export function ChatSelector({
   if (variant === 'toggles') {
     return (
       <div style={{ marginBottom: compact ? '0' : '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <div style={{ marginBottom: '0.5rem' }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{label}</span>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-            onClick={() => onChange(chats.map((c) => c.id))}
-          >
-            Select all
-          </button>
         </div>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.5rem' }}>
           {chats.map((c) => {
