@@ -102,12 +102,12 @@ export async function POST(request: NextRequest) {
       if (!path.endsWith('/')) zipFilePaths.add(path);
     });
 
-    function findInZip(photoPath: string): string | null {
+    const findInZip = (photoPath: string): string | null => {
       const normalized = photoPath.replace(/\\/g, '/').replace(/^\/+/, '');
       if (zipFilePaths.has(normalized)) return normalized;
       if (zipFilePaths.has(photoPath)) return photoPath;
       return null;
-    }
+    };
 
     const rows: {
       fromId: string;
