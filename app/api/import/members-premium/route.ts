@@ -39,7 +39,15 @@ export async function POST(request: NextRequest) {
 
     log.startup(`[members-premium-import] ▶ Starting — ${rows.length} rows from ${file.name}`);
 
-    const fromIds = [...new Set(rows.map((r) => r.fromId))];
+    const fromIds: string[] = [];
+    const seen: Record<string, boolean> = {};
+    for (let i = 0; i < rows.length; i++) {
+      const id = rows[i].fromId;
+      if (!seen[id]) {
+        seen[id] = true;
+        fromIds.push(id);
+      }
+    }
 
     const result = await pool.query(
       `UPDATE users
