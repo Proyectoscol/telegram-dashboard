@@ -151,7 +151,7 @@ export default function ContactsPage() {
           <select value={filterPremium} onChange={(e) => setFilterPremium(e.target.value)}>
             <option value="">All</option>
             <option value="true">Premium only</option>
-            <option value="false">Not in Premium (upsell list)</option>
+            <option value="false">Not in (upsell list)</option>
           </select>
         </label>
       </div>
@@ -286,7 +286,7 @@ export default function ContactsPage() {
                           : { background: '#2f3336', color: '#8b98a5' }
                       }
                     >
-                      {u.is_premium ? 'Premium' : 'Not in Premium'}
+                      {u.is_premium ? 'Premium' : 'Not in'}
                     </span>
                   </td>
                   <td>
