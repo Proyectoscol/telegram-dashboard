@@ -31,6 +31,7 @@ interface UserDetail {
   telegram_last_seen?: string | null;
   assigned_to: string | null;
   notes: string | null;
+  is_current_member?: boolean;
   stats: {
     messagesSent: number;
     serviceMessages?: number;
@@ -508,9 +509,12 @@ export function UserProfile({ fromId: fromIdProp, byId, initialChatIds }: UserPr
 
   return (
     <div>
-      <div className="user-detail-header">
-        <h1>{fullName}</h1>
-        <a href="/contacts" className="btn btn-secondary">Back to contacts</a>
+      <div className="user-detail-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
+        <h1 style={{ margin: 0 }}>{fullName}</h1>
+        <span className={user.is_current_member ? 'badge badge-success' : 'badge badge-muted'}>
+          {user.is_current_member ? 'Member' : 'Former'}
+        </span>
+        <a href="/contacts" className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Back to contacts</a>
       </div>
 
       {chats.length > 0 && (
